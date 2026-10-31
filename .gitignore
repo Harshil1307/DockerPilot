@@ -1,0 +1,17 @@
+node_modules/
+dist/
+/.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+coverage/
+backend/src/generated/
+*.tsbuildinfo
+playwright-report/
+test-results/
+# Environment files — all directories
+**/.env
+**/.env.*
+!/.env.example
+!**/.env.example

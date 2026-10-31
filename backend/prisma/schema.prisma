@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id                  String               @id @default(uuid()) @db.Uuid
+  name                String               @db.VarChar(100)
+  description         String?              @db.VarChar(1000)
+  repositoryUrl       String?              @db.VarChar(2048)
+  userId              String               @db.Uuid
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  composeEnvironments ComposeEnvironment[]
+  activities           Activity[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+enum ComposeValidationStatus {
+  NOT_VALIDATED
+  VALID
+  INVALID
+}
+
+enum ComposeDeploymentStatus {
+  NOT_DEPLOYED
+  DEPLOYING
+  RUNNING
+  FAILED
+  STOPPED
+  CLEANING
+  CLEANUP_FAILED
+  REMOVED
+}
+
+model ComposeEnvironment {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  name                   String                  @db.VarChar(100)
+  composeYaml            String                  @db.Text
+  validationStatus       ComposeValidationStatus @default(NOT_VALIDATED)
+  deploymentStatus       ComposeDeploymentStatus @default(NOT_DEPLOYED)
+  deploymentProjectName  String?                 @unique @db.VarChar(63)
+  deploymentStartedAt    DateTime?
+  deploymentCompletedAt  DateTime?
+  lastDeploymentError    String?                 @db.VarChar(500)
+  deploymentContainerIds String[]                @default([])
+  deploymentNetworkIds   String[]                @default([])
+  deploymentRemovedContainerIds String[]          @default([])
+  deploymentRemovedNetworkIds   String[]          @default([])
+  projectId              String                  @db.Uuid
+  project                Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  @@index([projectId, updatedAt])
+  @@index([deploymentStatus])
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  name         String    @db.VarChar(100)
+  email        String    @unique @db.VarChar(254)
+  passwordHash String    @db.VarChar(255)
+  projects     Project[]
+  activities   Activity[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+enum ActivityStatus {
+  SUCCEEDED
+  FAILED
+}
+
+model Activity {
+  id           String         @id @default(uuid()) @db.Uuid
+  userId       String         @db.Uuid
+  projectId    String?        @db.Uuid
+  actionType   String         @db.VarChar(64)
+  resourceType String         @db.VarChar(32)
+  resourceId   String?        @db.VarChar(128)
+  resourceName String?        @db.VarChar(255)
+  status       ActivityStatus
+  summary      String         @db.VarChar(500)
+  createdAt    DateTime       @default(now())
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project      Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt, id])
+  @@index([projectId, createdAt])
+}
