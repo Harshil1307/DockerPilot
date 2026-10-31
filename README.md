@@ -59,6 +59,8 @@ npm run db:migrate --workspace backend
 
 For a production deployment, use `npm run db:deploy` to apply committed migrations without resetting the database. See [production architecture](docs/production-architecture.md), [installation](docs/installation.md), and [operations](docs/operations.md) for the supported deployment shape, environment variables, backups, and launch limitations.
 
+For Render setup, see [Render deployment](docs/render-deployment.md) and the root [`render.yaml`](render.yaml). The Blueprint is configured with free preview plans; its free PostgreSQL database expires after 30 days and must not hold data that needs to persist.
+
 Create an account at `/register`, then sign in at `/login`. Sessions use an HTTP-only cookie; project routes require that session and only return or modify the signed-in user's projects. Project registration and management are available through `POST`, `GET`, `PATCH`, and `DELETE /api/projects` (single-project operations use `/api/projects/:id`). The dashboard reads project records from this API; the API uses Prisma to store them in PostgreSQL.
 
 The dashboard's Docker section reads local Engine status and container summaries from `GET /api/docker/status` and `GET /api/docker/containers`. It can start, stop, and restart eligible containers through authenticated `POST /api/docker/containers/:id/start`, `/stop`, and `/restart` routes. Dockerode uses its local default connection when possible and detects Docker Desktop's per-user macOS socket dynamically. If your Docker setup needs a different socket, set `DOCKER_SOCKET_PATH` in `backend/.env`; it is optional and must never be exposed through the frontend.

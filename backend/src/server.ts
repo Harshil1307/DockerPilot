@@ -2,7 +2,7 @@ import { app } from './app.js';
 import { env } from './config/env.js';
 import { prisma } from './config/prisma.js';
 
-const server = app.listen(env.PORT, () => {
+const server = app.listen(env.PORT, '0.0.0.0', () => {
   console.info(`[api] DockerPilot API listening on port ${env.PORT}`);
 });
 
