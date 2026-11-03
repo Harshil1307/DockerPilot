@@ -26,11 +26,19 @@ function setSessionCookie(response: Response, token: string): void {
   response.cookie(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
+    // Vercel proxies /api to Render, so the browser uses a same-origin cookie.
     sameSite: 'lax',
     path: '/',
     maxAge: SESSION_DURATION_MS,
   });
 }
+
+const sessionCookieOptions = {
+  httpOnly: true,
+  secure: env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
+};
 
 export const register: RequestHandler = async (request, response) => {
   const input = registerSchema.parse(request.body);
@@ -47,12 +55,7 @@ export const login: RequestHandler = async (request, response) => {
 };
 
 export const logout: RequestHandler = (_request, response) => {
-  response.clearCookie(SESSION_COOKIE_NAME, {
-    httpOnly: true,
-    secure: env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-  });
+  response.clearCookie(SESSION_COOKIE_NAME, sessionCookieOptions);
   response.status(204).send();
 };
 

@@ -1,5 +1,5 @@
-// VITE_API_BASE_URL is the API host (for example https://...onrender.com).
-// Keep the versioned API prefix in endpoint paths so host-only values work.
+// Use the frontend origin for API requests; Vercel and Vite route /api to the backend.
+// A configured /api base is normalized away so each endpoint includes the prefix once.
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '').replace(/\/api$/, '');
 
 export interface HealthResponse {
