@@ -1,6 +1,8 @@
-// Use the frontend origin for API requests; Vercel and Vite route /api to the backend.
-// A configured /api base is normalized away so each endpoint includes the prefix once.
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '').replace(/\/api$/, '');
+// Production requests stay on the frontend origin so the session cookie is first-party.
+// Vercel rewrites /api to Render; Vite proxies it locally during development.
+const apiBaseUrl = import.meta.env.PROD
+  ? ''
+  : (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '').replace(/\/api$/, '');
 
 export interface HealthResponse {
   status: 'ok';
