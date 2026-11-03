@@ -14,12 +14,14 @@ import { authRouter } from '../src/routes/auth.routes.js';
 import { projectRouter } from '../src/routes/project.routes.js';
 import { originGuard } from '../src/middleware/origin-guard.js';
 import { errorHandler } from '../src/middleware/error-handler.js';
+import { AppError } from '../src/errors/app-error.js';
 
 const userId = '11111111-1111-4111-8111-111111111111';
 const user = { id: userId, name: 'Test User', email: 'test@example.invalid', createdAt: new Date(), updatedAt: new Date() };
 
-async function sessionTestServer(context: TestContext) {
+async function sessionTestServer(context: TestContext, trustProxyHops = 0) {
   const app = express();
+  app.set('trust proxy', trustProxyHops);
   app.use(cors(corsOptions));
   app.use(originGuard);
   app.use(express.json());
@@ -139,4 +141,62 @@ test('CORS allows the exact Vercel origin, rejects other origins, and answers OP
   });
   assert.equal(bad.status, 403);
   assert.equal(bad.headers.get('access-control-allow-origin'), null);
+});
+
+test('successful logins and preflights do not consume the failed-login budget; proxy clients stay distinct', async (context) => {
+  mockServices(context);
+  const base = await sessionTestServer(context, 2);
+  const origin = 'https://docker-pilot.vercel.app';
+  const headers = (clientIp: string) => ({
+    Origin: origin,
+    'X-Forwarded-For': `${clientIp}, 203.0.113.20`,
+    'Content-Type': 'application/json',
+  });
+
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    const response = await fetch(`${base}/api/auth/login`, {
+      method: 'OPTIONS', headers: {
+        Origin: origin,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type',
+      },
+    });
+    assert.equal(response.status, 204);
+  }
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const response = await fetch(`${base}/api/auth/login`, {
+      method: 'POST', headers: headers('198.51.100.10'),
+      body: JSON.stringify({ email: user.email, password: 'correct-password' }),
+    });
+    assert.equal(response.status, 200);
+  }
+
+  authService.login = async () => {
+    throw new AppError('Email or password is incorrect.', 401, 'INVALID_CREDENTIALS');
+  };
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const response = await fetch(`${base}/api/auth/login`, {
+      method: 'POST', headers: headers('198.51.100.10'),
+      body: JSON.stringify({ email: user.email, password: 'wrong-password' }),
+    });
+    assert.equal(response.status, 401);
+  }
+
+  const secondClient = await fetch(`${base}/api/auth/login`, {
+    method: 'POST', headers: headers('198.51.100.11'),
+    body: JSON.stringify({ email: user.email, password: 'wrong-password' }),
+  });
+  assert.equal(secondClient.status, 401, 'a different forwarded client IP must have an independent budget');
+
+  const blocked = await fetch(`${base}/api/auth/login`, {
+    method: 'POST', headers: headers('198.51.100.10'),
+    body: JSON.stringify({ email: user.email, password: 'wrong-password' }),
+  });
+  assert.equal(blocked.status, 429);
+  assert.equal((await blocked.json() as { code: string }).code, 'RATE_LIMITED');
+  assert.ok(Number(blocked.headers.get('retry-after')) > 0);
+
+  const me = await fetch(`${base}/api/auth/me`, { headers: { Origin: origin } });
+  assert.equal(me.status, 401, 'the login limiter must not be a global API limiter');
 });

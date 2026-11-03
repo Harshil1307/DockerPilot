@@ -16,7 +16,8 @@ services:
       - key: NODE_ENV
         value: production
       - key: TRUST_PROXY_HOPS
-        value: "1"
+        # Vercel's proxy plus Render's ingress proxy; Vercel overwrites X-Forwarded-For.
+        value: "2"
       - key: FRONTEND_ORIGIN
         sync: false
       - key: JWT_SECRET

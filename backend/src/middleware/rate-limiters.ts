@@ -1,11 +1,22 @@
 import { rateLimit } from 'express-rate-limit';
 
-export function createRateLimiter(windowMs: number, limit: number, message: string) {
+interface RateLimiterOptions {
+  skipSuccessfulRequests?: boolean;
+}
+
+export function createRateLimiter(
+  windowMs: number,
+  limit: number,
+  message: string,
+  options: RateLimiterOptions = {},
+) {
   return rateLimit({
     windowMs,
     limit,
     standardHeaders: true,
     legacyHeaders: false,
+    skipSuccessfulRequests: options.skipSuccessfulRequests ?? false,
+    skip: (request) => request.method === 'OPTIONS',
     message: { error: message, code: 'RATE_LIMITED' },
   });
 }

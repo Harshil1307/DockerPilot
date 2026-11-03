@@ -55,15 +55,19 @@ test('registration validates password length before sending credentials', async 
 test('session cookie restores auth after refresh and authorizes project registration', async ({ page }) => {
   const projectId = '22222222-2222-4222-8222-222222222222';
   let created = false;
+  let sessionRestorations = 0;
   const requests: string[] = [];
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace(/^\/api/, '');
     requests.push(`${request.method()} ${path}`);
     const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => route.fulfill({ status, headers, contentType: 'application/json', body: JSON.stringify(body) });
-    if (path === '/auth/me') return created || request.headers().cookie?.includes('dockerpilot_session=')
-      ? json({ user: USER })
-      : json({ error: 'Authentication required.' }, 401);
+    if (path === '/auth/me') {
+      sessionRestorations += 1;
+      return created || request.headers().cookie?.includes('dockerpilot_session=')
+        ? json({ user: USER })
+        : json({ error: 'Authentication required.' }, 401);
+    }
     if (path === '/auth/login' && request.method() === 'POST') {
       return json({ user: USER }, 200, { 'set-cookie': 'dockerpilot_session=test-session; Path=/; HttpOnly; SameSite=Lax' });
     }
@@ -85,9 +89,30 @@ test('session cookie restores auth after refresh and authorizes project registra
   await expect(page.getByRole('heading', { name: 'Your projects,' })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Your projects,' })).toBeVisible();
+  expect(sessionRestorations).toBe(2, 'one session restoration per page load, despite React StrictMode');
   await page.getByRole('link', { name: /Register a project/ }).click();
   await page.getByLabel(/Project name/).fill('Session project');
   await page.getByRole('button', { name: 'Register project' }).click();
   await expect(page).toHaveURL(new RegExp(`/projects/${projectId}$`));
   expect(requests).toContain('POST /projects');
+});
+
+test('login shows a clear rate-limit message and Retry-After wait time', async ({ page }) => {
+  await page.route('**/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname.replace(/^\/api/, '');
+    if (path === '/auth/me') return route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'Authentication required.' }) });
+    if (path === '/auth/login') return route.fulfill({
+      status: 429,
+      headers: { 'retry-after': '30' },
+      contentType: 'text/plain',
+      body: 'Too Many Requests',
+    });
+    if (path === '/health') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', service: 'dockerpilot-api', timestamp: NOW }) });
+    return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'Not found.' }) });
+  });
+  await page.goto('/login');
+  await page.getByLabel('Email address').fill(USER.email);
+  await page.getByLabel('Password').fill('correct-password');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('alert')).toContainText('Too many requests. Try again in 30 seconds.');
 });

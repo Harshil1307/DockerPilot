@@ -337,7 +337,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { error?: string; details?: { message: string }[] } | null;
     const detail = body?.details?.map((item) => item.message).join(' ');
-    throw new ApiError(detail || body?.error || `Request failed (${response.status}).`, response.status);
+    let fallbackMessage = `Request failed (${response.status}).`;
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('retry-after');
+      const retrySeconds = retryAfter && /^\d+$/.test(retryAfter)
+        ? Number(retryAfter)
+        : retryAfter ? Math.ceil((Date.parse(retryAfter) - Date.now()) / 1000) : 0;
+      fallbackMessage = retrySeconds > 0
+        ? `Too many requests. Try again in ${retrySeconds} seconds.`
+        : 'Too many requests. Try again shortly.';
+    }
+    throw new ApiError(detail || body?.error || fallbackMessage, response.status);
   }
 
   if (response.status === 204) return undefined as T;
@@ -573,7 +583,13 @@ export function logoutAccount(): Promise<void> {
   return request<void>('/auth/logout', { method: 'POST' });
 }
 
+let currentUserRequest: Promise<User> | undefined;
+
 export async function fetchCurrentUser(): Promise<User> {
-  const result = await request<{ user: User }>('/auth/me');
-  return result.user;
+  if (!currentUserRequest) {
+    currentUserRequest = request<{ user: User }>('/auth/me')
+      .then((result) => result.user)
+      .finally(() => { currentUserRequest = undefined; });
+  }
+  return currentUserRequest;
 }

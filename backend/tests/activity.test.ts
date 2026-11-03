@@ -107,5 +107,6 @@ test('rate limiting rejects excess requests with a safe 429 response', async (co
   assert.equal((await fetch(url)).status, 200);
   const limited = await fetch(url);
   assert.equal(limited.status, 429);
+  assert.ok(Number(limited.headers.get('retry-after')) > 0);
   assert.equal((await limited.json() as { code: string }).code, 'RATE_LIMITED');
 });
