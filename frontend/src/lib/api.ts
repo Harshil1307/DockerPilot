@@ -1,4 +1,6 @@
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api';
+// VITE_API_BASE_URL is the API host (for example https://...onrender.com).
+// Keep the versioned API prefix in endpoint paths so host-only values work.
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '').replace(/\/api$/, '');
 
 export interface HealthResponse {
   status: 'ok';
@@ -321,7 +323,7 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${apiBaseUrl}${path}`, {
+    response = await fetch(`${apiBaseUrl}${path.startsWith('/api/') ? path : `/api${path}`}`, {
       ...init,
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...init?.headers },
@@ -441,7 +443,7 @@ export async function pullDockerImage(
 ): Promise<void> {
   let response: Response;
   try {
-    response = await fetch(`${apiBaseUrl}/docker/images/pull`, {
+    response = await fetch(`${apiBaseUrl}/api/docker/images/pull`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },

@@ -11,12 +11,15 @@ import { dockerRouter } from './routes/docker.routes.js';
 import { projectRouter } from './routes/project.routes.js';
 import { composeEnvironmentRouter, projectComposeRouter } from './routes/compose.routes.js';
 import { activityRouter } from './routes/activity.routes.js';
+import { corsOptions } from './config/cors.js';
+
+export const AUTH_API_PREFIX = '/api/auth';
 
 export const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', env.TRUST_PROXY_HOPS);
 app.use(helmet());
-app.use(cors({ origin: env.FRONTEND_ORIGIN, credentials: true }));
+app.use(cors(corsOptions));
 app.use(originGuard);
 app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
@@ -25,7 +28,7 @@ app.use((request, _response, next) => {
   next();
 });
 app.use('/api/health', healthRouter);
-app.use('/api/auth', authRouter);
+app.use(AUTH_API_PREFIX, authRouter);
 app.use('/api/activity', activityRouter);
 app.use('/api/docker', dockerRouter);
 app.use('/api/projects', projectRouter);
