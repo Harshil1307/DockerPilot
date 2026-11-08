@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { AuthPage } from './components/AuthPage';
 import { ComposeEnvironments } from './components/ComposeEnvironments';
@@ -10,6 +10,7 @@ import { DockerOverviewPage } from './components/DockerOverviewPage';
 import { ContainerInventory } from './components/ContainerInventory';
 import { ActivityHistoryPage } from './components/ActivityHistoryPage';
 import { ProjectForm } from './components/ProjectForm';
+import { LandingPage } from './components/LandingPage';
 import { ProtectedRoute, PublicOnlyRoute } from './components/ProtectedRoute';
 import { StatusBadge } from './components/StatusBadge';
 import {
@@ -59,10 +60,24 @@ function AppShell({ children }: { children: React.ReactNode }) {
           <span className="brand-mark" aria-hidden="true">D</span>
           <span>docker<span className="brand-accent">pilot</span></span>
         </Link>
-        <div className="topbar-right"><Link className="topbar-nav-link" to="/images">Images</Link><Link className="topbar-nav-link" to="/volumes">Volumes</Link><Link className="topbar-nav-link" to="/networks">Networks</Link><Link className="topbar-nav-link" to="/activity">Activity</Link><span className="environment-label">LOCAL ENVIRONMENT</span><StatusBadge connected={connected} /><span className="user-greeting">{user?.name}</span><button className="logout-button" onClick={() => void handleLogout()}>Log out</button></div>
+        <div className="topbar-right"><span className="environment-label">LOCAL ENVIRONMENT</span><StatusBadge connected={connected} /><span className="user-greeting">{user?.name}</span><button className="logout-button" onClick={() => void handleLogout()}>Log out</button></div>
       </header>
       {logoutError && <div className="form-message error-message logout-message" role="alert">{logoutError}</div>}
-      {children}
+      <div className="workspace-layout">
+        <aside className="workspace-sidebar" aria-label="Main navigation">
+          <span className="sidebar-label">WORKSPACE</span>
+          <NavLink to="/" end className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span aria-hidden="true">⌂</span> Overview</NavLink>
+          <span className="sidebar-label sidebar-section-label">DOCKER</span>
+          <NavLink to="/docker" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span aria-hidden="true">◈</span> Host overview</NavLink>
+          <NavLink to="/images" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span aria-hidden="true">▧</span> Images</NavLink>
+          <NavLink to="/volumes" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span aria-hidden="true">▤</span> Volumes</NavLink>
+          <NavLink to="/networks" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span aria-hidden="true">⌘</span> Networks</NavLink>
+          <span className="sidebar-label sidebar-section-label">HISTORY</span>
+          <NavLink to="/activity" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span aria-hidden="true">◷</span> Activity</NavLink>
+          <div className="sidebar-foot"><span className="sidebar-foot-dot" /> Docker Engine connection</div>
+        </aside>
+        <div className="workspace-main">{children}</div>
+      </div>
       <footer className="page-footer"><span>DOCKERPILOT <span className="footer-divider">/</span> DEVELOPMENT FOUNDATION</span><span>BUILT FOR THE WAY YOU SHIP</span></footer>
     </div>
   );
@@ -266,14 +281,20 @@ function NotFound() {
   return <main className="not-found"><span className="brand-mark" aria-hidden="true">D</span><h1>Page not found</h1><Link to="/">Return to overview</Link></main>;
 }
 
+function RootRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <main className="auth-loading"><span className="loading-indicator" /> Loading DockerPilot…</main>;
+  return user ? <AppShell><Overview /></AppShell> : <LandingPage />;
+}
+
 export default function App() {
   return <Routes>
+    <Route path="/" element={<RootRoute />} />
     <Route element={<PublicOnlyRoute />}>
       <Route path="/login" element={<AuthPage mode="login" />} />
       <Route path="/register" element={<AuthPage mode="register" />} />
     </Route>
     <Route element={<ProtectedRoute />}>
-      <Route path="/" element={<AppShell><Overview /></AppShell>} />
       <Route path="/images" element={<AppShell><ImageManagementPage /></AppShell>} />
       <Route path="/volumes" element={<AppShell><VolumeManagementPage /></AppShell>} />
       <Route path="/networks" element={<AppShell><NetworkManagementPage /></AppShell>} />

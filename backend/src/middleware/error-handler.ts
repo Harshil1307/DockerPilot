@@ -39,6 +39,18 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
     return;
   }
 
+  if (
+    error instanceof Prisma.PrismaClientInitializationError
+    || (error instanceof Prisma.PrismaClientKnownRequestError && ['P1001', 'P1002', 'P1008', 'P2024'].includes(error.code))
+  ) {
+    console.error('[api:error] PostgreSQL is unavailable for this request.');
+    response.status(503).json({
+      error: 'Database unavailable. Check that PostgreSQL is running and DATABASE_URL points to it.',
+      code: 'DATABASE_UNAVAILABLE',
+    });
+    return;
+  }
+
   // Do not serialize or print unknown errors: Docker/API errors can contain secrets or connection details.
   console.error('[api:error] Unhandled request failure.');
   response.status(500).json({ error: 'Internal server error', code: 'INTERNAL_SERVER_ERROR' });

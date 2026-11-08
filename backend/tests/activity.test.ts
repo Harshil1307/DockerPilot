@@ -10,6 +10,7 @@ import { errorHandler } from '../src/middleware/error-handler.js';
 import { describeActivity } from '../src/middleware/activity-recorder.js';
 import { createRateLimiter } from '../src/middleware/rate-limiters.js';
 import { activityRouter } from '../src/routes/activity.routes.js';
+import { projectRouter } from '../src/routes/project.routes.js';
 import { createActivityService, type ActivityInput, type ActivityRepository } from '../src/services/activity.service.js';
 
 const firstUser = '11111111-1111-4111-8111-111111111111';
@@ -47,6 +48,19 @@ test('activity middleware maps only supported mutations to fixed event types', (
   assert.deepEqual(describeActivity('DELETE', '/api/docker/volumes/:name'), { actionType: 'VOLUME_REMOVED', resourceType: 'volume' });
   assert.equal(describeActivity('POST', '/api/compose/:id/validate'), null);
   assert.equal(describeActivity('GET', '/api/docker/containers'), null);
+});
+
+test('project activity recording is scoped to project mutations, not nested Compose requests', () => {
+  assert.equal(projectRouter.stack.some((layer) => layer.name === 'recordAuthenticatedActivity'), false);
+  const mutationRoutes = projectRouter.stack
+    .filter((layer) => layer.route)
+    .map((layer) => layer.route!)
+    .filter((route) => route.methods.post || route.methods.patch || route.methods.delete);
+  assert.equal(mutationRoutes.length, 3);
+  assert.ok(mutationRoutes.every((route) => route.stack.some((handler) => handler.name === 'recordAuthenticatedActivity')));
+  assert.deepEqual(describeActivity('POST', '/api/projects/:projectId/compose/'), {
+    actionType: 'COMPOSE_ENVIRONMENT_CREATED', resourceType: 'compose_environment',
+  });
 });
 
 test('activity history uses the caller user scope, validated filters, stable newest-first page sizes', async () => {

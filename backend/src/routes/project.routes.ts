@@ -13,9 +13,8 @@ import {
 export const projectRouter = Router();
 
 projectRouter.use(requireAuth);
-projectRouter.use(recordAuthenticatedActivity);
 projectRouter.get('/', listProjects);
-projectRouter.post('/', dockerMutationLimiter, createProject);
+projectRouter.post('/', recordAuthenticatedActivity, dockerMutationLimiter, createProject);
 projectRouter.get('/:id', getProject);
-projectRouter.patch('/:id', dockerMutationLimiter, updateProject);
-projectRouter.delete('/:id', dockerMutationLimiter, deleteProject);
+projectRouter.patch('/:id', recordAuthenticatedActivity, dockerMutationLimiter, updateProject);
+projectRouter.delete('/:id', recordAuthenticatedActivity, dockerMutationLimiter, deleteProject);

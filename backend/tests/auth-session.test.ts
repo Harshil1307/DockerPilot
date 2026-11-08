@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import { test, type TestContext } from 'node:test';
+import { Prisma } from '@prisma/client';
 import { SESSION_COOKIE_NAME } from '../src/auth/auth.constants.js';
 import { createSessionToken } from '../src/auth/session-token.js';
 import { corsOptions } from '../src/config/cors.js';
@@ -100,6 +101,31 @@ test('login session survives restoration and authorizes project registration; lo
   assert.match(logout.headers.get('set-cookie') ?? '', /Expires=Thu, 01 Jan 1970/i);
   const afterLogout = await fetch(`${base}/api/auth/me`, { headers: { Origin: origin } });
   assert.equal(afterLogout.status, 401);
+});
+
+test('database connection failures during login return a safe actionable 503', async (context) => {
+  const oldLogin = authService.login;
+  authService.login = async () => {
+    throw new Prisma.PrismaClientInitializationError(
+      'database connection detail that must not be returned',
+      Prisma.prismaVersion.client,
+      'P1001',
+    );
+  };
+  context.after(() => { authService.login = oldLogin; });
+
+  const base = await sessionTestServer(context);
+  const response = await fetch(`${base}/api/auth/login`, {
+    method: 'POST',
+    headers: { Origin: 'http://localhost:5173', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: user.email, password: 'test-password' }),
+  });
+
+  assert.equal(response.status, 503);
+  const body = await response.json() as { error: string; code: string };
+  assert.equal(body.code, 'DATABASE_UNAVAILABLE');
+  assert.match(body.error, /PostgreSQL is running/);
+  assert.doesNotMatch(JSON.stringify(body), /database connection detail/);
 });
 
 test('registration creates a session and unauthenticated project creation returns 401', async (context) => {

@@ -9,6 +9,7 @@ import { createDockerImageService, type DockerImageClient } from './docker-image
 import { createDockerVolumeService, type DockerVolumeClient } from './docker-volume.service.js';
 import { createDockerNetworkService, type DockerNetworkClient, type DockerNetworkRecord } from './docker-network.service.js';
 import { createDockerOverviewService, type DockerSystemDiskUsage } from './docker-overview.service.js';
+import { readDockerStats } from './docker-stats.js';
 
 export interface DockerEngineStatus {
   reachable: boolean;
@@ -449,7 +450,10 @@ export const dockerService = {
   },
 
   async getContainerStats(id: string): Promise<Docker.ContainerStats> {
-    try { return await docker.getContainer(id).stats({ stream: false, 'one-shot': true }); }
+    try {
+      const stream = await docker.getContainer(id).stats({ stream: true });
+      return await readDockerStats(stream as NodeJS.ReadableStream & { destroy: () => void });
+    }
     catch (error) { throw translateDockerError(error); }
   },
 
@@ -551,7 +555,8 @@ export const dockerService = {
 
   async getComposeContainerStats(id: string): Promise<Docker.ContainerStats> {
     try {
-      return await docker.getContainer(id).stats({ stream: false, 'one-shot': true });
+      const stream = await docker.getContainer(id).stats({ stream: true });
+      return await readDockerStats(stream as NodeJS.ReadableStream & { destroy: () => void });
     } catch (error) {
       throw translateDockerError(error);
     }
