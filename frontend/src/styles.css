@@ -364,3 +364,31 @@ body{background:var(--dp-cream);color:var(--dp-ink)}
 @media(prefers-reduced-motion:reduce){.landing-page *{scroll-behavior:auto!important;transition:none!important}}
 .required-mark{color:var(--dp-orange)}
 .optional-label,.form-field small{color:var(--dp-muted)}
+
+/* Login is a quieter entry point into the DockerPilot workspace. */
+.auth-page-login{display:grid;grid-template-columns:minmax(330px,.88fr) minmax(440px,1.12fr);min-height:100vh;padding:0;background:var(--dp-cream);color:var(--dp-ink)}
+.auth-login-identity{display:flex;min-height:100vh;flex-direction:column;justify-content:space-between;padding:clamp(30px,5vw,72px);background:#292a26;color:#f5f1e9}
+.auth-page-login .auth-brand{align-self:flex-start;margin:0;color:#f5f1e9}
+.auth-page-login .brand-mark{width:31px;height:31px;border-radius:3px;background:var(--dp-orange);box-shadow:none;color:#211811}
+.auth-page-login .brand-accent{color:#e7a06b}
+.auth-login-story{max-width:540px;margin:auto 0;padding:70px 0}
+.auth-login-kicker{margin:0 0 20px;color:#b8b4aa;font-size:12px;line-height:1.5}
+.auth-login-story h1{margin:0;color:#f5f1e9;font-size:clamp(48px,5.5vw,76px);font-weight:550;letter-spacing:-4px;line-height:.99}
+.auth-login-story>p:last-child{max-width:410px;margin:24px 0 0;color:#c9c5bc;font-size:15px;line-height:1.75}
+.auth-workspace-map{margin:0;color:#c9c5bc;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}
+.auth-workspace-map span{padding:0 9px;color:#e7a06b}
+.auth-login-entry{display:grid;place-items:center;padding:clamp(32px,7vw,100px);border-left:1px solid var(--dp-line);background:var(--dp-cream)}
+.auth-login-form{width:min(100%,420px)}
+.auth-login-form .auth-login-kicker{margin-bottom:14px;color:var(--dp-muted)}
+.auth-login-form h2{margin:0 0 30px;color:var(--dp-ink);font-size:34px;font-weight:550;letter-spacing:-1.6px;line-height:1.1}
+.auth-page-login .auth-form{gap:19px;margin:0}
+.auth-page-login .form-field{color:var(--dp-ink)}
+.auth-page-login .form-field input{min-height:49px;border:1px solid #d8d0c5;border-radius:3px;background:#fffdf9;color:var(--dp-ink)}
+.auth-page-login .form-field input:focus{border-color:var(--dp-orange);outline:2px solid #c65c3026;outline-offset:1px}
+.auth-page-login .auth-submit{min-height:49px;margin-top:5px;border-radius:3px;background:var(--dp-orange);color:white;cursor:pointer;opacity:1}
+.auth-page-login .auth-submit:hover{background:var(--dp-orange-dark)}
+.auth-page-login .auth-submit:disabled{cursor:wait;opacity:.72}
+.auth-page-login .auth-switch{margin-top:25px;color:var(--dp-muted);text-align:left;font-size:12px}
+.auth-page-login .auth-switch a{color:var(--dp-orange-dark)}
+@media(max-width:760px){.auth-page-login{grid-template-columns:1fr}.auth-login-identity{min-height:0;padding:26px 28px 23px}.auth-login-story{margin:42px 0 39px;padding:0}.auth-login-story h1{font-size:clamp(43px,10vw,62px);letter-spacing:-2.8px}.auth-login-story>p:last-child{margin-top:17px;font-size:14px}.auth-login-entry{padding:42px 28px 52px;border-top:1px solid var(--dp-line);border-left:0}.auth-workspace-map{font-size:10px}}
+@media(max-width:380px){.auth-login-identity{padding-right:21px;padding-left:21px}.auth-login-entry{padding-right:21px;padding-left:21px}.auth-workspace-map span{padding:0 5px}}

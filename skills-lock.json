@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "charles-unslop": {
+      "source": "LemonFace0309/charles-skills",
+      "sourceType": "github",
+      "skillPath": "skills/charles-unslop/SKILL.md",
+      "computedHash": "130bc4761c3c9d5aecdaa85c1caa94b92e07502302ac6b351b37efeb9854728d"
+    }
+  }
+}

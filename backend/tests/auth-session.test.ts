@@ -8,6 +8,7 @@ import { test, type TestContext } from 'node:test';
 import { Prisma } from '@prisma/client';
 import { SESSION_COOKIE_NAME } from '../src/auth/auth.constants.js';
 import { createSessionToken } from '../src/auth/session-token.js';
+import { env } from '../src/config/env.js';
 import { corsOptions } from '../src/config/cors.js';
 import { authService } from '../src/services/auth.service.js';
 import { projectService } from '../src/services/project.service.js';
@@ -117,7 +118,7 @@ test('database connection failures during login return a safe actionable 503', a
   const base = await sessionTestServer(context);
   const response = await fetch(`${base}/api/auth/login`, {
     method: 'POST',
-    headers: { Origin: 'http://localhost:5173', 'Content-Type': 'application/json' },
+    headers: { Origin: env.FRONTEND_ORIGIN, 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: user.email, password: 'test-password' }),
   });
 

@@ -54,6 +54,38 @@ export function AuthPage({ mode }: AuthPageProps) {
     }
   }
 
+  if (!isRegister) {
+    return (
+      <main className="auth-page auth-page-login">
+        <section className="auth-login-identity" aria-label="DockerPilot">
+          <Link className="brand auth-brand" to="/" aria-label="DockerPilot home">
+            <span className="brand-mark" aria-hidden="true">D</span>
+            <span>docker<span className="brand-accent">pilot</span></span>
+          </Link>
+          <div className="auth-login-story">
+            <p className="auth-login-kicker">A clear view of your Docker workspace</p>
+            <h1>Docker, in<br />good order.</h1>
+            <p>Inspect your host, organize projects, and manage Compose environments from one considered workspace.</p>
+          </div>
+          <p className="auth-workspace-map">Host <span>→</span> Projects <span>→</span> Compose</p>
+        </section>
+        <section className="auth-login-entry" aria-label="Sign in to DockerPilot">
+          <div className="auth-login-form">
+            <p className="auth-login-kicker">Your workspace is ready</p>
+            <h2>Sign in</h2>
+            <form className="project-form auth-form" onSubmit={handleSubmit} noValidate>
+              <label className="form-field"><span>Email address</span><input type="email" autoComplete="email" autoFocus value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" maxLength={254} /></label>
+              <label className="form-field"><span>Password</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Your password" /></label>
+              {error && <div className="form-message error-message" role="alert">{error}</div>}
+              <button className="primary-button auth-submit" type="submit" disabled={submitting}>{submitting ? 'Please wait…' : 'Sign in'}</button>
+            </form>
+            <p className="auth-switch">New to DockerPilot? <Link to="/register">Create an account</Link></p>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="auth-page">
       <Link className="brand auth-brand" to="/" aria-label="DockerPilot home">
