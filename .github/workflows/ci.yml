@@ -1,0 +1,69 @@
+name: DockerPilot CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/dockerpilot_ci?schema=public
+      JWT_SECRET: ci-only-placeholder-secret-that-is-not-used-in-production
+      FRONTEND_ORIGIN: http://localhost:5173
+      TRUST_PROXY_HOPS: "0"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Validate Prisma schema
+        run: npx prisma validate --schema backend/prisma/schema.prisma
+
+      - name: Check TypeScript
+        run: npm run typecheck
+
+      - name: Run backend tests
+        run: npm test --workspace @dockerpilot/backend
+
+      - name: Run frontend helper tests
+        working-directory: frontend
+        run: node --import tsx --test tests/*.test.ts
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run frontend end-to-end tests
+        run: npm run test:e2e --workspace @dockerpilot/frontend
+
+      - name: Build frontend and backend
+        run: npm run build
