@@ -94,7 +94,13 @@ async function pair(): Promise<AgentConfig> {
   if (!response.ok || !body?.agent || !body.credential) {
     throw new Error(body?.error ?? 'Could not pair this computer. Generate a fresh code and try again.');
   }
-  const config = configSchema.parse({ apiBaseUrl: baseUrl, ...body.agent, credential: body.credential });
+  const config = configSchema.parse({
+    apiBaseUrl: baseUrl,
+    agentId: body.agent.id,
+    userId: body.agent.userId,
+    name: body.agent.name,
+    credential: body.credential,
+  });
   await saveConfig(config);
   console.info(`Paired ${config.name}. Credentials saved privately in ${configPath}.`);
   return config;
