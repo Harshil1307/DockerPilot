@@ -23,7 +23,7 @@ export function createRateLimiter(
     // request budget. Keep IP-based protection for unauthenticated endpoints.
     keyGenerator: (request) => request.userId
       ? `user:${request.userId}`
-      : ipKeyGenerator(request.ip),
+      : ipKeyGenerator(request.ip ?? request.socket.remoteAddress ?? 'unknown'),
     message: { error: message, code: 'RATE_LIMITED' },
   });
 }
