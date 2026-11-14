@@ -70,8 +70,36 @@ model User {
   passwordHash String    @db.VarChar(255)
   projects     Project[]
   activities   Activity[]
+  localAgents  LocalAgent[]
+  agentPairingChallenges LocalAgentPairingChallenge[]
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+}
+
+model LocalAgent {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @db.Uuid
+  name           String    @db.VarChar(100)
+  credentialHash String    @unique @db.Char(64)
+  createdAt      DateTime  @default(now())
+  lastSeenAt     DateTime?
+  revokedAt      DateTime?
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt, createdAt])
+}
+
+model LocalAgentPairingChallenge {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  codeHash  String    @unique @db.Char(64)
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  consumedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
 }
 
 enum ActivityStatus {

@@ -32,8 +32,8 @@ export interface ComposeCleanupRepository extends ComposeDeploymentOwnershipRepo
 
 export interface ComposeCleanupDocker {
   listComposeDeploymentResources(identity: ComposeDeploymentIdentity, containerIds: string[], networkIds: string[]): Promise<ComposeDockerResource[]>;
-  inspectComposeResource(type: ComposeDockerResourceType, id: string): Promise<ComposeDockerResource | null>;
-  removeComposeResource(type: ComposeDockerResourceType, id: string): Promise<void>;
+  inspectComposeResource(type: ComposeDockerResourceType, id: string, identity?: ComposeDeploymentIdentity): Promise<ComposeDockerResource | null>;
+  removeComposeResource(type: ComposeDockerResourceType, id: string, identity?: ComposeDeploymentIdentity): Promise<void>;
 }
 
 function cleanupFailure(error: unknown): AppError {
@@ -74,7 +74,7 @@ export function createComposeCleanupService(
       throw new AppError('Deployment ownership changed during cleanup.', 409, 'DEPLOYMENT_OWNERSHIP_CONFLICT');
     }
 
-    const resource = await docker.inspectComposeResource(type, id);
+    const resource = await docker.inspectComposeResource(type, id, identity);
     if (!resource) return false;
     assertComposeResourceLabels(resource, identity, type, id);
     if (type === 'network' && resource.attachedContainerIds.some(
@@ -83,7 +83,7 @@ export function createComposeCleanupService(
       throw new AppError('A deployment network is shared with an unregistered container and cannot be removed safely.', 409, 'DEPLOYMENT_SHARED_RESOURCE');
     }
 
-    await docker.removeComposeResource(type, id);
+    await docker.removeComposeResource(type, id, identity);
     return true;
   }
 
@@ -110,7 +110,7 @@ export function createComposeCleanupService(
         // Check network attachment ownership before removing any container, so a shared network
         // cannot leave the deployment half-cleaned merely because the conflict was found late.
         for (const network of verified.resources.filter((resource) => resource.type === 'network')) {
-          const current = await docker.inspectComposeResource('network', network.id);
+          const current = await docker.inspectComposeResource('network', network.id, verified.identity);
           if (!current) continue;
           assertComposeResourceLabels(current, verified.identity, 'network', network.id);
           if (current.attachedContainerIds.some((id) => !verified.deployment.deploymentContainerIds.includes(id))) {

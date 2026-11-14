@@ -5,6 +5,7 @@ import type Docker from 'dockerode';
 import {
   dockerService,
   type ComposeContainerDetails,
+  type ComposeDeploymentIdentity,
   type ComposeDockerResource,
 } from './docker.service.js';
 import {
@@ -29,9 +30,9 @@ export interface ContainerMetrics {
 }
 
 export interface MonitoringDocker extends ComposeDeploymentResourceReader {
-  inspectComposeContainer(id: string): Promise<ComposeContainerDetails | null>;
-  getComposeContainerStats(id: string): Promise<Docker.ContainerStats>;
-  getComposeContainerLogs(id: string, tail?: number): Promise<{ data: Buffer; tty: boolean }>;
+  inspectComposeContainer(id: string, identity?: ComposeDeploymentIdentity): Promise<ComposeContainerDetails | null>;
+  getComposeContainerStats(id: string, identity?: ComposeDeploymentIdentity): Promise<Docker.ContainerStats>;
+  getComposeContainerLogs(id: string, tail?: number, identity?: ComposeDeploymentIdentity): Promise<{ data: Buffer; tty: boolean }>;
 }
 
 function finite(value: unknown): value is number {
@@ -218,7 +219,7 @@ export function createComposeMonitoringService(
       const statsAllowed = registeredIds.length <= MAX_CONTAINERS_WITH_STATS;
       const containers = await Promise.all(registeredIds.map(async (id): Promise<ComposeContainerInventoryItem> => {
         if (!resources.has(id)) return missingContainer(id);
-        const details = await docker.inspectComposeContainer(id);
+        const details = await docker.inspectComposeContainer(id, verified.identity);
         if (!details) return missingContainer(id);
         assertComposeResourceLabels({
           type: 'container', id: details.id, labels: details.labels, attachedContainerIds: [],
@@ -230,7 +231,7 @@ export function createComposeMonitoringService(
           metricsUnavailableReason = `Statistics are limited to deployments with ${MAX_CONTAINERS_WITH_STATS} or fewer containers per refresh.`;
         } else if (details.state === 'running') {
           try {
-            const stats = await withMonitoringTimeout(docker.getComposeContainerStats(id), STATS_TIMEOUT_MS, 'CONTAINER_STATS_TIMEOUT');
+            const stats = await withMonitoringTimeout(docker.getComposeContainerStats(id, verified.identity), STATS_TIMEOUT_MS, 'CONTAINER_STATS_TIMEOUT');
             metrics = calculateContainerMetrics(stats);
             if (Object.values(metrics).every((value) => value === null)) metricsUnavailableReason = 'Docker did not provide usable statistics.';
           } catch (error) {
@@ -266,7 +267,7 @@ export function createComposeMonitoringService(
       if (!verified.resources.some((resource) => resource.type === 'container' && resource.id === containerId)) {
         throw new AppError('Container is no longer present in Docker.', 404, 'CONTAINER_NOT_FOUND');
       }
-      const details = await docker.inspectComposeContainer(containerId);
+      const details = await docker.inspectComposeContainer(containerId, verified.identity);
       if (!details) throw new AppError('Container is no longer present in Docker.', 404, 'CONTAINER_NOT_FOUND');
       assertComposeResourceLabels({
         type: 'container', id: details.id, labels: details.labels, attachedContainerIds: [],
@@ -274,7 +275,7 @@ export function createComposeMonitoringService(
 
       let logResult: { data: Buffer; tty: boolean };
       try {
-        logResult = await withMonitoringTimeout(docker.getComposeContainerLogs(containerId, tail), LOG_TIMEOUT_MS, 'CONTAINER_LOGS_TIMEOUT');
+        logResult = await withMonitoringTimeout(docker.getComposeContainerLogs(containerId, tail, verified.identity), LOG_TIMEOUT_MS, 'CONTAINER_LOGS_TIMEOUT');
       } catch (error) {
         if (error instanceof AppError || error instanceof DockerUnavailableError) throw error;
         throw new AppError('Recent container logs could not be loaded. Try again.', 502, 'CONTAINER_LOGS_FAILED');

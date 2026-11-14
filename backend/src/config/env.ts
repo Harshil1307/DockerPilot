@@ -8,6 +8,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters.'),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   DOCKER_SOCKET_PATH: z.string().trim().min(1).optional(),
+  DOCKER_CONNECTION_MODE: z.enum(['local', 'agent']).default('local'),
 });
 
 const result = envSchema.safeParse(process.env);

@@ -11,6 +11,7 @@ import { dockerRouter } from './routes/docker.routes.js';
 import { projectRouter } from './routes/project.routes.js';
 import { composeEnvironmentRouter, projectComposeRouter } from './routes/compose.routes.js';
 import { activityRouter } from './routes/activity.routes.js';
+import { localAgentRouter } from './routes/local-agent.routes.js';
 import { corsOptions } from './config/cors.js';
 
 export const AUTH_API_PREFIX = '/api/auth';
@@ -30,6 +31,7 @@ app.use((request, _response, next) => {
 app.use('/api/health', healthRouter);
 app.use(AUTH_API_PREFIX, authRouter);
 app.use('/api/activity', activityRouter);
+app.use('/api/agents', localAgentRouter);
 app.use('/api/docker', dockerRouter);
 app.use('/api/projects', projectRouter);
 app.use('/api/projects/:projectId/compose', projectComposeRouter);

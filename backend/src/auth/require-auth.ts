@@ -1,5 +1,6 @@
 import type { RequestHandler } from 'express';
 import { SESSION_COOKIE_NAME } from './auth.constants.js';
+import { runAsAuthenticatedUser } from './request-context.js';
 import { readSessionToken } from './session-token.js';
 
 export const requireAuth: RequestHandler = (request, response, next) => {
@@ -12,5 +13,5 @@ export const requireAuth: RequestHandler = (request, response, next) => {
   }
 
   request.userId = userId;
-  next();
+  runAsAuthenticatedUser(userId, next);
 };

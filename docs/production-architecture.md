@@ -25,9 +25,9 @@ flowchart LR
 
 ## Public multi-user architecture: future design, not implemented
 
-For a public application that connects each user's Docker environment, the preferred target is a hosted control plane and a separately installed local agent. The agent should make an outbound TLS connection, pair through a short-lived single-use code, and receive narrowly typed operations over an authenticated channel. The server must authorize the account and environment on every request; the agent must enforce a command allowlist and verify resource ownership locally. Use revocable scoped credentials, request IDs/nonces, expiry, bounded payloads, strict timeouts, backpressure, bounded logs/metrics, and reconnect state. Never accept shell text, arbitrary Docker API paths, or a Docker socket from the browser. Do not persist user Docker credentials at the control plane.
+The hosted control plane now pairs with a separately running local agent. The agent makes an outbound TLS connection, pairs through a short-lived single-use code, and receives narrowly typed operations over an authenticated channel. The server authorizes the account and environment on every request; the agent enforces a command allowlist and verifies resource ownership locally. Credentials are revocable, request IDs and expiries are checked, payloads and logs are bounded, operations have timeouts, and reconnects are supported. The browser never supplies shell text, arbitrary Docker API paths, or a Docker socket. Docker credentials are not stored at the control plane.
 
-That architecture requires a reviewed design for the pairing protocol, relay, per-environment records, agent lifecycle and upgrades, and a transport abstraction used by all Docker services. It is a substantial redesign of the core execution boundary. No partial agent, pairing endpoint, or insecure tunnel is included in this release. Keep the deployment self-hosted until that work is separately designed and security-reviewed.
+For the current single-computer expo setup, configure the hosted backend for agent mode and keep the agent running on the Mac during the presentation. Each additional user's computer must be paired separately from that user's signed-in account. Keep the API and agent software updated, and revoke lost or retired computers from the account's device list.
 
 ## Production constraints
 

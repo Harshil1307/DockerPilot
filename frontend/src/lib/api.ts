@@ -10,6 +10,15 @@ export interface HealthResponse {
   timestamp: string;
 }
 
+export interface LocalAgent {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastSeenAt: string | null;
+  revokedAt: string | null;
+  connected: boolean;
+}
+
 export type ActivityActionType =
   | 'PROJECT_CREATED' | 'PROJECT_UPDATED' | 'PROJECT_DELETED'
   | 'COMPOSE_ENVIRONMENT_CREATED' | 'COMPOSE_ENVIRONMENT_UPDATED' | 'COMPOSE_ENVIRONMENT_DELETED'
@@ -356,6 +365,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function fetchHealth(): Promise<HealthResponse> {
   return request<HealthResponse>('/health');
+}
+
+export function listLocalAgents(): Promise<{ agents: LocalAgent[] }> {
+  return request<{ agents: LocalAgent[] }>('/agents');
+}
+
+export function createLocalAgentPairingChallenge(): Promise<{ code: string; expiresAt: string }> {
+  return request<{ code: string; expiresAt: string }>('/agents/pairing-challenges', { method: 'POST', body: '{}' });
+}
+
+export function revokeLocalAgent(id: string): Promise<void> {
+  return request<void>(`/agents/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 export function listActivity(filters: { actionType?: ActivityActionType; resourceType?: ActivityResourceType; page?: number } = {}): Promise<ActivityPage> {

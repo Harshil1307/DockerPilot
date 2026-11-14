@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchDockerOverview, type DockerOverview, type DockerStorageMetric } from '../lib/api';
 import { dockerStoragePercent, formatDockerBytes } from '../lib/dockerOverview';
+import { LocalAgentPanel } from './LocalAgentPanel';
 
 function displayCount(value: number | null): string {
   return value === null ? 'Unavailable' : value.toLocaleString();
@@ -54,6 +55,7 @@ export function DockerOverviewPage() {
 
     {overview && <>
       {unavailable && <div className="host-daemon-unavailable" role="alert"><strong>Docker Engine unavailable</strong><span>{overview.daemon.message ?? 'Start Docker Desktop and refresh to load host data.'}</span></div>}
+      <LocalAgentPanel localEngineReachable={overview.daemon.status === 'connected'} />
       {overview.daemon.status === 'error' && <div className="host-daemon-unavailable" role="alert"><strong>Docker status could not be checked</strong><span>{overview.daemon.message ?? 'Try refreshing the overview.'}</span></div>}
       {Object.keys(overview.errors).length > 0 && <section className="host-partial-warning" role="status"><strong>Some Docker metrics are unavailable.</strong><ul>{Object.entries(overview.errors).map(([key, message]) => <li key={key}><span>{key === 'storage' ? 'Storage' : key[0]!.toUpperCase() + key.slice(1)}:</span> {message}</li>)}</ul></section>}
 

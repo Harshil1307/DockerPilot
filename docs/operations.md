@@ -4,7 +4,7 @@
 
 This release is for one operator on a private or self-hosted machine. Build the frontend as static files and serve them from an HTTPS reverse proxy. Proxy `/api` to the persistent Node API process on a private interface. Run the API on the same trusted host as its Docker daemon and PostgreSQL, or connect it to a private managed PostgreSQL instance. Do not deploy this API as a public multi-tenant Docker control plane.
 
-No provider has been provisioned and no deployment configuration is connected to external credentials. A static host such as Vercel can serve the frontend, but it does not make a remote browser able to safely reach a user's local daemon. A general public API service that cannot access the user's daemon is not a Docker management backend. The current recommended deployment remains self-hosted; a hosted agent control plane is future work.
+The hosted setup uses a local DockerPilot agent to connect a user's computer to the hosted API. The agent makes an outbound encrypted connection, so Docker's private socket is never published to the internet. For the expo setup, deploy the backend with `DOCKER_CONNECTION_MODE=agent`, apply the database migration, sign into the hosted site, choose **Pair this computer**, and run the one-time pairing command shown on the page in a Terminal window on the Mac that has Docker Desktop running. Keep that Terminal window open for the demo. Revoke that computer from the site when it should no longer have access. Other users pair their own computers with their own accounts in the same way.
 
 ## Environment variables
 

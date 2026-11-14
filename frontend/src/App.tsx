@@ -8,6 +8,7 @@ import { VolumeManagementPage } from './components/VolumeManagementPage';
 import { NetworkManagementPage } from './components/NetworkManagementPage';
 import { DockerOverviewPage } from './components/DockerOverviewPage';
 import { ContainerInventory } from './components/ContainerInventory';
+import { LocalAgentPanel } from './components/LocalAgentPanel';
 import { ActivityHistoryPage } from './components/ActivityHistoryPage';
 import { ProjectForm } from './components/ProjectForm';
 import { LandingPage } from './components/LandingPage';
@@ -147,6 +148,7 @@ function Overview() {
       </section>
 
       <ContainerInventory status={dockerStatus} containers={containers} loading={dockerLoading} error={dockerError} onRefresh={() => loadDocker()} />
+      <LocalAgentPanel localEngineReachable={dockerStatus?.reachable ?? null} />
 
       <section className="projects-section" aria-labelledby="projects-heading">
         <div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> WORKSPACE</div><h2 id="projects-heading">Your projects</h2></div><span className="section-count">{loading ? 'LOADING' : `${projects.length} ${projects.length === 1 ? 'PROJECT' : 'PROJECTS'}`}</span></div>

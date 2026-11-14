@@ -8,6 +8,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "tsx --test tests/*.test.ts",
     "test:docker": "DOCKERPILOT_RUN_DOCKER_INTEGRATION=1 node --import tsx --test tests/compose-docker.integration.test.ts",
+    "agent:dev": "tsx src/agent/client.ts",
+    "agent": "node dist/agent/client.js",
     "start": "node dist/server.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -25,6 +27,7 @@
     "express-rate-limit": "^8.7.2",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
+    "ws": "^8.23.0",
     "yaml": "^2.9.1",
     "zod": "^4.6.7"
   },
@@ -36,6 +39,7 @@
     "@types/express": "^5.0.1",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.13.10",
+    "@types/ws": "^8.18.2",
     "prisma": "^6.19.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"

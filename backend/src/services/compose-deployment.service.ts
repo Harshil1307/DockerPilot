@@ -3,7 +3,6 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { stringify as stringifyYaml } from 'yaml';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { AppError } from '../errors/app-error.js';
@@ -13,6 +12,8 @@ import { composeCleanupService } from './compose-cleanup.service.js';
 import { composeDeploymentOwnershipService, generatedComposeProjectName } from './compose-ownership.service.js';
 import { MAX_COMPOSE_YAML_BYTES } from './compose-environment.service.js';
 import { normalizeValidatedComposeYaml } from './compose-validation.service.js';
+import { generatedComposeConfiguration } from './generated-compose.js';
+import { requestLocalAgent } from './local-agent-relay.js';
 
 const execFileAsync = promisify(execFile);
 const DEPLOYMENT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -42,7 +43,21 @@ function getComposeProcessEnvironment(): NodeJS.ProcessEnv {
   return processEnvironment;
 }
 
-async function runCompose(args: string[], cwd?: string): Promise<string> {
+async function runCompose(
+  args: string[],
+  cwd?: string,
+  agentDeployment?: { identity: ComposeDeploymentIdentity; configuration: NonNullable<ReturnType<typeof normalizeValidatedComposeYaml>['configuration']> },
+): Promise<string> {
+  if (env.DOCKER_CONNECTION_MODE === 'agent') {
+    if (args.length === 2 && args[0] === 'version' && args[1] === '--short') {
+      return requestLocalAgent<string>('compose.version', {});
+    }
+    if (agentDeployment && args.includes('up')) {
+      await requestLocalAgent('compose.up', agentDeployment, { timeoutMs: DEPLOYMENT_TIMEOUT_MS });
+      return '';
+    }
+    throw new AppError('This Compose command is not available through the local agent.', 403, 'AGENT_OPERATION_NOT_ALLOWED');
+  }
   const result = await execFileAsync('docker', ['compose', ...args], {
     cwd,
     env: getComposeProcessEnvironment(),
@@ -61,39 +76,6 @@ function composeArgs(projectName: string, workingDirectory: string, composeFile:
     '--file', composeFile,
     ...command,
   ];
-}
-
-function generatedComposeConfiguration(
-  configuration: NonNullable<ReturnType<typeof normalizeValidatedComposeYaml>['configuration']>,
-  identity: ComposeDeploymentIdentity,
-): string {
-  const labels = {
-    'com.dockerpilot.managed': 'true',
-    'com.dockerpilot.owner-id': identity.ownerId,
-    'com.dockerpilot.project-id': identity.projectId,
-    'com.dockerpilot.environment-id': identity.environmentId,
-  };
-  const services: Record<string, Record<string, unknown>> = {};
-
-  for (const [serviceName, approved] of Object.entries(configuration.services)) {
-    services[serviceName] = {
-      image: approved.image,
-      ...(approved.ports ? { ports: approved.ports } : {}),
-      ...(approved.restart ? { restart: approved.restart } : {}),
-      ...(approved.depends_on ? { depends_on: approved.depends_on } : {}),
-      labels: { ...labels },
-      deploy: {
-        resources: {
-          limits: { cpus: '0.50', memory: '512M' },
-        },
-      },
-    };
-  }
-
-  return stringifyYaml({
-    services,
-    networks: { default: { labels: { ...labels } } },
-  }, { lineWidth: 0 });
 }
 
 function getSafeFailure(error: unknown): SafeFailure {
@@ -265,7 +247,7 @@ export const composeDeploymentService = {
         deploymentAttempted = true;
         await runCompose(composeArgs(identity.composeProjectName, workingDirectory, composeFile, [
           'up', '--detach', '--remove-orphans', '--wait', '--wait-timeout', '90',
-        ]), workingDirectory);
+        ]), workingDirectory, { identity, configuration: normalized.configuration });
 
         const resources = await dockerService.inspectComposeDeployment(identity);
         if (!resources.safeToOperate || resources.containerCount !== normalized.validation.servicesCount

@@ -5,11 +5,12 @@ import Docker from 'dockerode';
 import { env } from '../config/env.js';
 import { AppError } from '../errors/app-error.js';
 import { DockerUnavailableError } from '../errors/docker-unavailable-error.js';
-import { createDockerImageService, type DockerImageClient } from './docker-image.service.js';
-import { createDockerVolumeService, type DockerVolumeClient } from './docker-volume.service.js';
-import { createDockerNetworkService, type DockerNetworkClient, type DockerNetworkRecord } from './docker-network.service.js';
+import { createDockerImageService, normalizeImageReference, type DockerImageClient, type DockerImagePullProgress } from './docker-image.service.js';
+import { createDockerVolumeService, type DockerVolumeClient, type DockerVolumeSummary, type DockerVolumeDetails } from './docker-volume.service.js';
+import { createDockerNetworkService, type DockerNetworkClient, type DockerNetworkRecord, type DockerNetworkSummary, type DockerNetworkDetails } from './docker-network.service.js';
 import { createDockerOverviewService, type DockerSystemDiskUsage } from './docker-overview.service.js';
 import { readDockerStats } from './docker-stats.js';
+import { requestLocalAgent } from './local-agent-relay.js';
 
 export interface DockerEngineStatus {
   reachable: boolean;
@@ -80,6 +81,11 @@ export interface ComposeContainerDetails {
   createdAt: string | null;
   startedAt: string | null;
   labels: Record<string, string>;
+}
+
+export interface DockerContainerOwnershipMetadata {
+  Id: string;
+  Config?: { Labels?: Record<string, string> };
 }
 
 export interface DockerContainerDetails extends ComposeContainerDetails {
@@ -190,7 +196,34 @@ const imageClient: DockerImageClient = {
   },
 };
 
-export const dockerImageService = createDockerImageService(imageClient);
+const localDockerImageService = createDockerImageService(imageClient);
+const remoteImagePulls = new Set<string>();
+export const dockerImageService = env.DOCKER_CONNECTION_MODE === 'agent' ? {
+  listImages: () => requestLocalAgent<Awaited<ReturnType<typeof localDockerImageService.listImages>>>('image.list', {}),
+  inspectImage: (id: unknown) => requestLocalAgent<Awaited<ReturnType<typeof localDockerImageService.inspectImage>>>('image.inspect', { id }),
+  beginPull(input: unknown) {
+    const reference = normalizeImageReference(input);
+    if (remoteImagePulls.has(reference)) throw new AppError('A pull for this image is already in progress.', 409, 'IMAGE_PULL_IN_PROGRESS');
+    remoteImagePulls.add(reference);
+    let started = false;
+    return {
+      reference,
+      async run(onProgress: (progress: DockerImagePullProgress) => void) {
+        if (started) throw new AppError('This image pull has already started.', 409, 'IMAGE_PULL_IN_PROGRESS');
+        started = true;
+        try {
+          await requestLocalAgent('image.pull', { reference }, {
+            timeoutMs: 10 * 60 * 1000,
+            onProgress: (progress) => onProgress(progress as DockerImagePullProgress),
+          });
+        } finally {
+          remoteImagePulls.delete(reference);
+        }
+      },
+    };
+  },
+  removeImage: (id: unknown) => requestLocalAgent<void>('image.remove', { id }),
+} : localDockerImageService;
 
 const volumeClient: DockerVolumeClient = {
   async listVolumes() {
@@ -242,7 +275,13 @@ const volumeClient: DockerVolumeClient = {
   },
 };
 
-export const dockerVolumeService = createDockerVolumeService(volumeClient);
+const localDockerVolumeService = createDockerVolumeService(volumeClient);
+export const dockerVolumeService = env.DOCKER_CONNECTION_MODE === 'agent' ? {
+  listVolumes: () => requestLocalAgent<DockerVolumeSummary[]>('volume.list', {}),
+  inspectVolume: (name: unknown) => requestLocalAgent<DockerVolumeDetails>('volume.inspect', { name }),
+  createVolume: (name: unknown) => requestLocalAgent<DockerVolumeSummary>('volume.create', { name }),
+  removeVolume: (name: unknown, confirmation: unknown) => requestLocalAgent<void>('volume.remove', { name, confirmation }),
+} : localDockerVolumeService;
 
 function toDockerNetworkRecord(network: Docker.NetworkInspectInfo): DockerNetworkRecord {
   return {
@@ -295,7 +334,17 @@ const networkClient: DockerNetworkClient = {
   },
 };
 
-export const dockerNetworkService = createDockerNetworkService(networkClient);
+const localDockerNetworkService = createDockerNetworkService(networkClient);
+export const dockerNetworkService = env.DOCKER_CONNECTION_MODE === 'agent' ? {
+  listNetworks: () => requestLocalAgent<Awaited<ReturnType<typeof localDockerNetworkService.listNetworks>>>('network.list', {}),
+  inspectNetwork: (id: unknown) => requestLocalAgent<DockerNetworkDetails>('network.inspect', { id }),
+  createNetwork: (name: unknown, options: { internal?: unknown; enableIPv6?: unknown }) => requestLocalAgent<DockerNetworkSummary>('network.create', {
+    name,
+    internal: options.internal ?? false,
+    enableIPv6: options.enableIPv6 ?? false,
+  }),
+  removeNetwork: (id: unknown, confirmationName: unknown) => requestLocalAgent<void>('network.remove', { id, confirmationName }),
+} : localDockerNetworkService;
 
 function labelsMatchDeployment(labels: Record<string, string> | undefined, identity: ComposeDeploymentIdentity): boolean {
   if (!labels
@@ -385,7 +434,17 @@ async function inspectOwnedContainer(container: Docker.Container, userId: string
 }
 
 export const dockerService = {
+  async getDiskUsage(): Promise<DockerSystemDiskUsage> {
+    if (env.DOCKER_CONNECTION_MODE === 'agent') return requestLocalAgent<DockerSystemDiskUsage>('engine.diskUsage', {});
+    try {
+      return await docker.df() as DockerSystemDiskUsage;
+    } catch (error) {
+      throw translateDockerError(error);
+    }
+  },
+
   async getStatus(): Promise<DockerEngineStatus> {
+    if (env.DOCKER_CONNECTION_MODE === 'agent') return requestLocalAgent<DockerEngineStatus>('engine.status', {});
     try {
       const version = await docker.version();
       return {
@@ -407,6 +466,7 @@ export const dockerService = {
   },
 
   async listContainers(userId: string): Promise<DockerContainerSummary[]> {
+    if (env.DOCKER_CONNECTION_MODE === 'agent') return requestLocalAgent<DockerContainerSummary[]>('container.list', { userId });
     try {
       const containers = await docker.listContainers({ all: true });
       return containers.map((container) => toContainerSummary(container, userId));
@@ -416,6 +476,7 @@ export const dockerService = {
   },
 
   async inspectContainer(id: string): Promise<DockerContainerDetails | null> {
+    if (env.DOCKER_CONNECTION_MODE === 'agent') return requestLocalAgent<DockerContainerDetails | null>('container.inspect', { id });
     try {
       const info = await docker.getContainer(id).inspect();
       const labels = info.Config?.Labels ?? {};
@@ -449,7 +510,8 @@ export const dockerService = {
     }
   },
 
-  async getContainerStats(id: string): Promise<Docker.ContainerStats> {
+  async getContainerStats(id: string, userId?: string): Promise<Docker.ContainerStats> {
+    if (env.DOCKER_CONNECTION_MODE === 'agent') return requestLocalAgent<Docker.ContainerStats>('container.stats', { id, userId });
     try {
       const stream = await docker.getContainer(id).stats({ stream: true });
       return await readDockerStats(stream as NodeJS.ReadableStream & { destroy: () => void });
@@ -462,6 +524,9 @@ export const dockerService = {
     registeredContainerIds: string[],
     registeredNetworkIds: string[],
   ): Promise<ComposeDockerResource[]> {
+    if (env.DOCKER_CONNECTION_MODE === 'agent') {
+      return requestLocalAgent<ComposeDockerResource[]>('compose.resources.list', { identity, containerIds: registeredContainerIds, networkIds: registeredNetworkIds });
+    }
     try {
       const [containers, networks] = await Promise.all([
         docker.listContainers({ all: true }),
@@ -498,6 +563,7 @@ export const dockerService = {
   },
 
   async inspectComposeDeployment(identity: ComposeDeploymentIdentity): Promise<ComposeDeploymentResources> {
+    if (env.DOCKER_CONNECTION_MODE === 'agent') return requestLocalAgent<ComposeDeploymentResources>('compose.deployment.inspect', { identity });
     const resources = await this.listComposeDeploymentResources(identity, [], []);
     const containers = resources.filter((resource) => resource.type === 'container');
     const networks = resources.filter((resource) => resource.type === 'network');
@@ -511,7 +577,11 @@ export const dockerService = {
     };
   },
 
-  async inspectComposeResource(type: ComposeDockerResourceType, id: string): Promise<ComposeDockerResource | null> {
+  async inspectComposeResource(type: ComposeDockerResourceType, id: string, identity?: ComposeDeploymentIdentity): Promise<ComposeDockerResource | null> {
+    if (env.DOCKER_CONNECTION_MODE === 'agent') {
+      if (!identity) throw new AppError('Deployment identity is required for hosted resource inspection.', 400, 'DEPLOYMENT_OWNERSHIP_CONFLICT');
+      return requestLocalAgent<ComposeDockerResource | null>('compose.resource.inspect', { type, id, identity });
+    }
     try {
       if (type === 'container') {
         const info = await docker.getContainer(id).inspect();
@@ -530,7 +600,11 @@ export const dockerService = {
     }
   },
 
-  async inspectComposeContainer(id: string): Promise<ComposeContainerDetails | null> {
+  async inspectComposeContainer(id: string, identity?: ComposeDeploymentIdentity): Promise<ComposeContainerDetails | null> {
+    if (env.DOCKER_CONNECTION_MODE === 'agent') {
+      if (!identity) throw new AppError('Deployment identity is required for hosted container inspection.', 400, 'DEPLOYMENT_OWNERSHIP_CONFLICT');
+      return requestLocalAgent<ComposeContainerDetails | null>('compose.container.inspect', { id, identity });
+    }
     try {
       const info = await docker.getContainer(id).inspect();
       const labels = info.Config?.Labels ?? {};
@@ -553,7 +627,11 @@ export const dockerService = {
     }
   },
 
-  async getComposeContainerStats(id: string): Promise<Docker.ContainerStats> {
+  async getComposeContainerStats(id: string, identity?: ComposeDeploymentIdentity): Promise<Docker.ContainerStats> {
+    if (env.DOCKER_CONNECTION_MODE === 'agent') {
+      if (!identity) throw new AppError('Deployment identity is required for hosted container metrics.', 400, 'DEPLOYMENT_OWNERSHIP_CONFLICT');
+      return requestLocalAgent<Docker.ContainerStats>('compose.container.stats', { id, identity });
+    }
     try {
       const stream = await docker.getContainer(id).stats({ stream: true });
       return await readDockerStats(stream as NodeJS.ReadableStream & { destroy: () => void });
@@ -562,7 +640,10 @@ export const dockerService = {
     }
   },
 
-  async getComposeContainerLogs(id: string, tail = 100): Promise<{ data: Buffer; tty: boolean }> {
+  async getComposeContainerLogs(id: string, tail = 100, identity?: ComposeDeploymentIdentity): Promise<{ data: Buffer; tty: boolean }> {
+    if (env.DOCKER_CONNECTION_MODE === 'agent') {
+      return requestLocalAgent<{ data: Buffer; tty: boolean }>(identity ? 'compose.container.logs' : 'container.logs', identity ? { id, tail, identity } : { id, tail });
+    }
     try {
       const container = docker.getContainer(id);
       const [info, data] = await Promise.all([
@@ -586,7 +667,12 @@ export const dockerService = {
     }
   },
 
-  async removeComposeResource(type: ComposeDockerResourceType, id: string): Promise<void> {
+  async removeComposeResource(type: ComposeDockerResourceType, id: string, identity?: ComposeDeploymentIdentity): Promise<void> {
+    if (env.DOCKER_CONNECTION_MODE === 'agent') {
+      if (!identity) throw new AppError('Deployment identity is required for hosted resource removal.', 400, 'DEPLOYMENT_OWNERSHIP_CONFLICT');
+      await requestLocalAgent('compose.resource.remove', { type, id, identity });
+      return;
+    }
     try {
       if (type === 'container') {
         await docker.getContainer(id).remove({ force: true, v: false, link: false });
@@ -603,8 +689,29 @@ export const dockerService = {
     id: string,
     userId: string,
     action: ContainerControlAction,
-    verifyDeploymentOwnership?: (container: Docker.ContainerInspectInfo) => Promise<void>,
+    verifyDeploymentOwnership?: (container: DockerContainerOwnershipMetadata) => Promise<void>,
   ): Promise<DockerContainerOperationResult> {
+    if (env.DOCKER_CONNECTION_MODE === 'agent') {
+      const verifyOwnership = async () => {
+        const info = await requestLocalAgent<DockerContainerDetails | null>('container.inspect', { id });
+        if (!info) throw new AppError('Container not found.', 404, 'CONTAINER_NOT_FOUND');
+        const metadata: DockerContainerOwnershipMetadata = { Id: info.id, Config: { Labels: info.labels } };
+        await verifyDeploymentOwnership?.(metadata);
+        return info;
+      };
+      const before = await verifyOwnership();
+      const labels = before.labels;
+      const identity = labels[ENVIRONMENT_ID_LABEL] ? {
+        ownerId: userId,
+        projectId: labels[PROJECT_ID_LABEL] ?? '',
+        environmentId: labels[ENVIRONMENT_ID_LABEL]!,
+        composeProjectName: labels['com.docker.compose.project'] ?? '',
+      } : undefined;
+      if (verifyDeploymentOwnership) await requestLocalAgent('container.control', { id, userId, action, identity });
+      else await requestLocalAgent('container.control', { id, userId, action });
+      const after = await verifyOwnership();
+      return { id: after.id.slice(0, 12), name: after.name, state: after.state, status: after.state === 'running' ? 'Running' : 'Stopped', action };
+    }
     const container = docker.getContainer(id);
     const initialInfo = await inspectOwnedContainer(container, userId);
     const operationKey = initialInfo.Id.toLowerCase();
@@ -664,6 +771,6 @@ export const dockerOverviewService = createDockerOverviewService({
   listVolumes: () => dockerVolumeService.listVolumes(),
   listNetworks: () => dockerNetworkService.listNetworks(),
   async getDiskUsage() {
-    return await docker.df() as DockerSystemDiskUsage;
+    return dockerService.getDiskUsage();
   },
 });

@@ -9,12 +9,14 @@ services:
     buildCommand: npm ci --include=dev && npm run db:generate --workspace @dockerpilot/backend && npm run build --workspace @dockerpilot/backend && npm run db:deploy --workspace @dockerpilot/backend
     startCommand: npm run start --workspace @dockerpilot/backend
     healthCheckPath: /api/health/ready
-    autoDeployTrigger: 'off'
+    autoDeployTrigger: commit
     envVars:
       - key: NODE_VERSION
         value: 22.22.0
       - key: NODE_ENV
         value: production
+      - key: DOCKER_CONNECTION_MODE
+        value: agent
       - key: TRUST_PROXY_HOPS
         # Browser API requests go directly to Render; trust Render's ingress proxy.
         value: "1"
@@ -32,7 +34,7 @@ services:
     runtime: static
     buildCommand: npm ci --include=dev && npm run build --workspace @dockerpilot/frontend
     staticPublishPath: frontend/dist
-    autoDeployTrigger: 'off'
+    autoDeployTrigger: commit
     envVars:
       - key: NODE_VERSION
         value: 22.22.0
