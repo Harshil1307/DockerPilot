@@ -116,7 +116,7 @@ function getSafeFailure(error: unknown): SafeFailure {
     return { statusCode: 504, code: 'COMPOSE_DEPLOYMENT_TIMEOUT', message: 'Docker Compose deployment timed out. Check Docker Desktop and the image registry, then retry.' };
   }
   if (/cannot connect to the docker daemon|is the docker daemon running|error during connect/.test(stderr)) {
-    return { statusCode: 503, code: 'DOCKER_UNAVAILABLE', message: 'Docker Engine is unavailable. Start Docker Desktop and retry the deployment.' };
+    return { statusCode: 503, code: 'DOCKER_UNAVAILABLE', message: 'DockerPilot’s API cannot reach a Docker Engine. On the hosted site, the API runs on Render and cannot access Docker installed on your computer. To manage your local Docker, run DockerPilot on the same computer as Docker, or add a secure local agent.' };
   }
   if (/port is already allocated|address already in use|bind:.*address/.test(stderr)) {
     return { statusCode: 409, code: 'DEPLOYMENT_PORT_CONFLICT', message: 'A configured localhost port is already in use.' };

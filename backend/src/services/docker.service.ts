@@ -401,7 +401,7 @@ export const dockerService = {
       return {
         reachable: false,
         engine: null,
-        message: 'Docker Engine is unavailable. Start Docker Desktop and check its local socket connection.',
+        message: 'DockerPilot’s API cannot reach a Docker Engine. On the hosted site, the API runs on Render and cannot access Docker installed on your computer. To manage your local Docker, run DockerPilot on the same computer as Docker, or add a secure local agent.',
       };
     }
   },
