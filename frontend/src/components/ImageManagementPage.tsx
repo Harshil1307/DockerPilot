@@ -10,6 +10,7 @@ import {
   type DockerImagePullProgress,
 } from '../lib/api';
 import { dockerImageName, filterAndSortDockerImages, formatImageSize, type DockerImageSort } from '../lib/images';
+import { useConfirm } from './ConfirmDialog';
 
 function formatCreatedAt(value: string | null): string {
   if (!value) return 'Unavailable';
@@ -18,6 +19,7 @@ function formatCreatedAt(value: string | null): string {
 }
 
 export function ImageManagementPage() {
+  const confirm = useConfirm();
   const [images, setImages] = useState<DockerImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -86,7 +88,7 @@ export function ImageManagementPage() {
   async function handleRemove(image: DockerImage) {
     const name = image.repositoryTags.length ? image.repositoryTags.join(', ') : '<none>:<none>';
     if (image.containerCount > 0 || image.protected || removingId) return;
-    if (!window.confirm(`Remove ${name} (${image.id})? This removes only the selected image and will never force removal.`)) return;
+    if (!await confirm({ title: `Remove ${name}?`, message: `This removes only image ${image.id}; DockerPilot will never force removal.`, confirmLabel: 'Remove image', destructive: true })) return;
     setRemovingId(image.id);
     setNotice(null);
     setLoadError(null);

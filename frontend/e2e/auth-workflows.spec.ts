@@ -86,9 +86,9 @@ test('session cookie restores auth after refresh and authorizes project registra
   await page.getByLabel('Email address').fill(USER.email);
   await page.getByLabel('Password').fill('correct-password');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Your projects,' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Your Docker Engine/ })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Your projects,' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Your Docker Engine/ })).toBeVisible();
   expect(sessionRestorations).toBe(2, 'one session restoration per page load, despite React StrictMode');
   await page.getByRole('link', { name: /Register a project/ }).click();
   await page.getByLabel(/Project name/).fill('Session project');

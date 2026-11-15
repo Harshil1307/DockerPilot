@@ -15,6 +15,7 @@ import { ProjectForm } from './components/ProjectForm';
 import { LandingPage } from './components/LandingPage';
 import { ProtectedRoute, PublicOnlyRoute } from './components/ProtectedRoute';
 import { StatusBadge } from './components/StatusBadge';
+import { ConfirmProvider, useConfirm } from './components/ConfirmDialog';
 import {
   createProject,
   deleteProject,
@@ -29,6 +30,19 @@ import {
   type Project,
   type ProjectInput,
 } from './lib/api';
+
+function SidebarIcon({ name }: { name: 'overview' | 'host' | 'images' | 'volumes' | 'networks' | 'activity' }) {
+  const common = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true as const };
+  const paths = {
+    overview: <><rect x="3.5" y="3.5" width="7" height="7" rx="1" /><rect x="13.5" y="3.5" width="7" height="7" rx="1" /><rect x="3.5" y="13.5" width="7" height="7" rx="1" /><rect x="13.5" y="13.5" width="7" height="7" rx="1" /></>,
+    host: <><path d="M4 18.5h16M6.5 15a5.5 5.5 0 0 1 11 0" /><path d="m12 14 3.2-3.2M8 18.5v-1m4 1v-1m4 1v-1" /></>,
+    images: <><rect x="4" y="4" width="14" height="14" rx="2" /><path d="m6 16 3.5-4 2.5 2 2-2 4 4M8 8.5h.01" /><path d="M8 20h12a2 2 0 0 0 2-2V8" /></>,
+    volumes: <><ellipse cx="12" cy="6" rx="7.5" ry="3" /><path d="M4.5 6v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6M4.5 12v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6" /></>,
+    networks: <><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="m8.3 10.9 7.4-3.8m-7.4 6 7.4 3.8" /></>,
+    activity: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.5 2" /></>,
+  };
+  return <svg {...common}>{paths[name]}</svg>;
+}
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -68,14 +82,14 @@ function AppShell({ children }: { children: React.ReactNode }) {
       <div className="workspace-layout">
         <aside className="workspace-sidebar" aria-label="Main navigation">
           <span className="sidebar-label">WORKSPACE</span>
-          <NavLink to="/" end className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span aria-hidden="true">⌂</span> Overview</NavLink>
+          <NavLink to="/" end aria-label="Overview" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span><SidebarIcon name="overview" /></span> Overview</NavLink>
           <span className="sidebar-label sidebar-section-label">DOCKER</span>
-          <NavLink to="/docker" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span aria-hidden="true">◈</span> Host overview</NavLink>
-          <NavLink to="/images" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span aria-hidden="true">▧</span> Images</NavLink>
-          <NavLink to="/volumes" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span aria-hidden="true">▤</span> Volumes</NavLink>
-          <NavLink to="/networks" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span aria-hidden="true">⌘</span> Networks</NavLink>
+          <NavLink to="/docker" aria-label="Host overview" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span><SidebarIcon name="host" /></span> Host overview</NavLink>
+          <NavLink to="/images" aria-label="Images" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span><SidebarIcon name="images" /></span> Images</NavLink>
+          <NavLink to="/volumes" aria-label="Volumes" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span><SidebarIcon name="volumes" /></span> Volumes</NavLink>
+          <NavLink to="/networks" aria-label="Networks" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span><SidebarIcon name="networks" /></span> Networks</NavLink>
           <span className="sidebar-label sidebar-section-label">HISTORY</span>
-          <NavLink to="/activity" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span aria-hidden="true">◷</span> Activity</NavLink>
+          <NavLink to="/activity" aria-label="Activity" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span><SidebarIcon name="activity" /></span> Activity</NavLink>
           <div className="sidebar-foot"><span className="sidebar-foot-dot" /> Docker Engine connection</div>
         </aside>
         <div className="workspace-main">{children}</div>
@@ -135,8 +149,8 @@ function Overview() {
     <>
       <section className="hero">
         <div className="eyebrow"><span className="eyebrow-line" /> DEPLOYMENT CONTROL CENTER</div>
-        <h1>Your projects,<br /><span>under control.</span></h1>
-        <p className="hero-copy">A clear view of your application deployments starts here.<br className="desktop-break" /> Register a project to begin organizing its environment.</p>
+        <h1>Your Docker Engine,<br /><span>in clear view.</span></h1>
+        <p className="hero-copy">Inspect containers, read live metrics, and keep Compose deployments close to the projects they serve.</p>
         <div className="hero-actions"><Link className="primary-button" to="/projects/new"><span aria-hidden="true">＋</span> Register a project</Link><Link className="host-overview-link" to="/docker">Docker host overview <span aria-hidden="true">→</span></Link><span className="phase-note">YOUR PROJECTS, AT A GLANCE</span></div>
       </section>
 
@@ -145,7 +159,7 @@ function Overview() {
       <section className="overview-grid" aria-label="Platform overview">
         <article className="overview-card"><div className="card-icon icon-box" aria-hidden="true">▣</div><div className="card-label">REGISTERED PROJECTS</div><div className="card-value">{loading ? '…' : error ? '—' : projects.length}</div><p>{error ? 'Project count unavailable.' : 'Projects registered in DockerPilot.'}</p></article>
         <article className="overview-card"><div className="card-icon icon-pulse" aria-hidden="true">⌁</div><div className="card-label">RUNNING CONTAINERS</div><div className="card-value">{dockerLoading ? '…' : dockerError ? '—' : runningContainerCount}</div><p>{dockerError ? 'Docker count unavailable.' : 'Currently running in Docker Desktop.'}</p></article>
-        <article className="overview-card"><div className="card-icon icon-clock" aria-hidden="true">◷</div><div className="card-label">LATEST DEPLOYMENT</div><div className="card-value card-value-small">Not yet deployed</div><p>Deployment history will appear here in a later phase.</p></article>
+        <article className="overview-card"><div className="card-icon icon-clock" aria-hidden="true">◷</div><div className="card-label">DOCKER ENGINE</div><div className="card-value card-value-small">{dockerLoading ? 'Checking…' : dockerStatus?.reachable ? 'Connected' : 'Unavailable'}</div><p>{dockerLoading ? 'Checking the local engine connection.' : dockerStatus?.reachable ? dockerStatus.engine?.version ? `Engine version ${dockerStatus.engine.version}` : 'Local engine is ready.' : dockerStatus?.message ?? 'Docker Engine is unavailable.'}</p></article>
       </section>
 
       <ContainerInventory status={dockerStatus} containers={containers} loading={dockerLoading} error={dockerError} onRefresh={() => loadDocker()} />
@@ -208,6 +222,7 @@ function ProjectCreatePage() {
 function ProjectDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const location = useLocation();
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
@@ -242,7 +257,7 @@ function ProjectDetailPage() {
   }
 
   async function handleDelete() {
-    if (!project || !window.confirm(`Delete “${project.name}”? This action cannot be undone.`)) return;
+    if (!project || !await confirm({ title: `Delete “${project.name}”?`, message: 'This action cannot be undone.', confirmLabel: 'Delete project', destructive: true })) return;
     setError(null);
     try {
       await deleteProject(project.id);
@@ -292,7 +307,7 @@ function RootRoute() {
 }
 
 export default function App() {
-  return <Routes>
+  return <ConfirmProvider><Routes>
     <Route path="/" element={<RootRoute />} />
     <Route element={<PublicOnlyRoute />}>
       <Route path="/login" element={<AuthPage mode="login" />} />
@@ -308,5 +323,5 @@ export default function App() {
       <Route path="/projects/:id" element={<ProjectDetailPage />} />
     </Route>
     <Route path="*" element={<NotFound />} />
-  </Routes>;
+  </Routes></ConfirmProvider>;
 }

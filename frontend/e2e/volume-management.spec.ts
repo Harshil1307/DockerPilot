@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
+import { acceptAppConfirmations } from './app-confirmation';
 
 const NOW = '2026-10-31T10:00:00.000Z';
 const USER = { id: '11111111-1111-4111-8111-111111111111', name: 'Test User', email: 'test@example.invalid', createdAt: NOW, updatedAt: NOW };
@@ -80,7 +81,7 @@ test('volume inventory supports searching, sorting, safe inspection, and blocks 
 
 test('volume creation refreshes inventory and removal confirms and targets only the selected name', async ({ page }) => {
   const api = await installVolumeMocks(page);
-  page.on('dialog', (dialog) => dialog.accept());
+  await acceptAppConfirmations(page);
   await page.goto('/volumes');
   await page.getByLabel('Volume name').fill('test_volume_6_2');
   await page.getByRole('button', { name: 'Create volume' }).click();

@@ -9,8 +9,10 @@ import {
   type DockerNetworkDetails,
 } from '../lib/api';
 import { filterAndSortDockerNetworks, formatNetworkCreatedAt, type DockerNetworkSort } from '../lib/networks';
+import { useConfirm } from './ConfirmDialog';
 
 export function NetworkManagementPage() {
+  const confirm = useConfirm();
   const [networks, setNetworks] = useState<DockerNetwork[]>([]);
   const [ipv6Supported, setIpv6Supported] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -82,7 +84,7 @@ export function NetworkManagementPage() {
 
   async function handleRemove(network: DockerNetwork) {
     if (network.containerCount || network.protected || removingId) return;
-    const accepted = window.confirm(`Remove network “${network.name}” (${network.id})? DockerPilot will remove only this exact network after confirming it has no connected containers. It will not disconnect containers or force removal.`);
+    const accepted = await confirm({ title: `Remove network “${network.name}”?`, message: `DockerPilot will remove only ${network.id} after confirming it has no connected containers. It will not disconnect containers or force removal.`, confirmLabel: 'Remove network', destructive: true });
     if (!accepted) return;
     setRemovingId(network.id);
     setNotice(null);

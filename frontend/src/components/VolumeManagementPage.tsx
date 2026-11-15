@@ -9,8 +9,10 @@ import {
   type DockerVolumeDetails,
 } from '../lib/api';
 import { filterAndSortDockerVolumes, formatVolumeCreatedAt, type DockerVolumeSort } from '../lib/volumes';
+import { useConfirm } from './ConfirmDialog';
 
 export function VolumeManagementPage() {
+  const confirm = useConfirm();
   const [volumes, setVolumes] = useState<DockerVolume[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -73,7 +75,7 @@ export function VolumeManagementPage() {
 
   async function handleRemove(volume: DockerVolume) {
     if (volume.inUse || volume.protected || removingName) return;
-    const accepted = window.confirm(`Remove Docker volume “${volume.name}”? This permanently removes data stored in this volume. DockerPilot will only remove this exact, unused volume and will not force removal.`);
+    const accepted = await confirm({ title: `Remove volume “${volume.name}”?`, message: 'This permanently removes the data in this unused volume. DockerPilot will remove only this volume and will not force removal.', confirmLabel: 'Remove volume', destructive: true });
     if (!accepted) return;
     setRemovingName(volume.name);
     setNotice(null);

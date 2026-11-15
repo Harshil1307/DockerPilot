@@ -17,6 +17,7 @@ import {
 } from '../lib/api';
 import { availableComposeActions, deploymentStatusLabel } from '../lib/composeLifecycle';
 import { ComposeMonitoringPanel } from './ComposeMonitoringPanel';
+import { useConfirm } from './ConfirmDialog';
 
 const SAMPLE_COMPOSE = `services:\n  web:\n    image: nginx:alpine\n    ports:\n      - "127.0.0.1:8080:80"\n    restart: unless-stopped\n`;
 
@@ -46,6 +47,7 @@ async function loadEnvironmentsWithDeploymentStatus(projectId: string): Promise<
 }
 
 export function ComposeEnvironments({ projectId }: { projectId: string }) {
+  const confirm = useConfirm();
   const [environments, setEnvironments] = useState<ComposeEnvironmentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
@@ -101,7 +103,7 @@ export function ComposeEnvironments({ projectId }: { projectId: string }) {
       stop: `Stop all registered containers for “${environment.name}”? The deployment and its resources will remain registered.`,
       restart: `Restart all registered containers for “${environment.name}”?`,
     };
-    if (!window.confirm(prompts[action])) return;
+    if (!await confirm({ title: `${action[0].toUpperCase()}${action.slice(1)} “${environment.name}”?`, message: prompts[action], confirmLabel: `${action[0].toUpperCase()}${action.slice(1)}`, destructive: action === 'stop' })) return;
     setLifecycleOperation({ id: environment.id, action });
     setListError(null);
     setNotice(`${action === 'start' ? 'Starting' : action === 'stop' ? 'Stopping' : 'Restarting'} “${environment.name}”…`);
@@ -121,7 +123,7 @@ export function ComposeEnvironments({ projectId }: { projectId: string }) {
   }
 
   async function handleCleanup(environment: ComposeEnvironmentSummary) {
-    if (!window.confirm(`Clean up “${environment.name}”? This removes only the registered containers and networks. It is different from Stop, which keeps resources for later use. Images and volumes are not removed.`)) return;
+    if (!await confirm({ title: `Clean up “${environment.name}”?`, message: 'This removes only its registered containers and networks. Unlike Stop, it removes those resources; images and volumes remain.', confirmLabel: 'Clean up stack', destructive: true })) return;
     setLifecycleOperation({ id: environment.id, action: 'cleanup' });
     setListError(null);
     setNotice(`Cleaning up “${environment.name}”…`);
@@ -232,7 +234,7 @@ export function ComposeEnvironments({ projectId }: { projectId: string }) {
   }
 
   async function handleDelete(environment: ComposeEnvironmentSummary) {
-    if (!window.confirm(`Delete Compose environment “${environment.name}”? This cannot be undone.`)) return;
+    if (!await confirm({ title: `Delete Compose environment “${environment.name}”?`, message: 'This cannot be undone.', confirmLabel: 'Delete environment', destructive: true })) return;
     setListError(null);
     setNotice(null);
     try {
@@ -247,7 +249,7 @@ export function ComposeEnvironments({ projectId }: { projectId: string }) {
 
   async function handleDeploy(environment: ComposeEnvironmentSummary) {
     if (environment.validationStatus !== 'VALID' || deployingId) return;
-    if (!window.confirm(`Deploy “${environment.name}” to Docker Desktop? This will create or update its containers.`)) return;
+    if (!await confirm({ title: `Deploy “${environment.name}”?`, message: 'This will create or update its containers on the connected Docker Engine.', confirmLabel: 'Deploy stack' })) return;
     setDeployingId(environment.id);
     setListError(null);
     setNotice(`Deploying “${environment.name}”…`);

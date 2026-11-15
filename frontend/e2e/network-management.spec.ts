@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
+import { acceptAppConfirmations } from './app-confirmation';
 
 const NOW = '2026-10-31T10:00:00.000Z';
 const USER = { id: '11111111-1111-4111-8111-111111111111', name: 'Test User', email: 'test@example.invalid', createdAt: NOW, updatedAt: NOW };
@@ -84,7 +85,7 @@ test('network inventory searches, filters, sorts, and shows running and stopped 
 
 test('network creation sends only supported bridge options and removal confirms exact full ID and name', async ({ page }) => {
   const api = await installNetworkMocks(page);
-  page.on('dialog', (dialog) => dialog.accept());
+  await acceptAppConfirmations(page);
   await page.goto('/networks');
   await page.getByLabel('Network name').fill('private_app_net');
   await page.getByLabel('Internal network').check();

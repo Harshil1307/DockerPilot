@@ -95,13 +95,13 @@ test('pull form displays progress, adds the image, and reports successful comple
 
 test('removal requires confirmation and sends only the selected full image ID', async ({ page }) => {
   const api = await installImageMocks(page);
-  let confirmation = '';
-  page.on('dialog', async (dialog) => { confirmation = dialog.message(); await dialog.accept(); });
   await page.goto('/images');
   const row = page.locator('.image-table tbody tr').filter({ hasText: 'nginx:alpine' });
   await row.getByRole('button', { name: 'Remove' }).click();
+  const confirmation = page.getByRole('dialog');
+  await expect(confirmation).toContainText(FREE_ID);
+  await confirmation.getByRole('button', { name: 'Remove image' }).click();
   await expect(page.getByText('Image nginx:alpine removed.')).toBeVisible();
-  expect(confirmation).toContain(FREE_ID);
   expect(api.deleted).toBe(FREE_ID);
   await expect(page.getByText('nginx:alpine', { exact: true })).toHaveCount(0);
 });

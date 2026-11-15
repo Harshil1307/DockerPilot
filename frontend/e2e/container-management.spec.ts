@@ -56,11 +56,12 @@ test('container lifecycle actions require confirmation and show operation feedba
   await mockApi(page);
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Docker containers' })).toBeVisible();
-  page.on('dialog', (dialog) => dialog.dismiss());
   await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  const confirmation = page.getByRole('dialog');
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByText('alpha-api')).toBeVisible();
-  page.removeAllListeners('dialog');
-  page.on('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Stop' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'alpha-api stopped successfully.' })).toBeVisible();
 });

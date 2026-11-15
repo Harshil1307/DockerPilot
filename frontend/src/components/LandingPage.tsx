@@ -27,9 +27,9 @@ export function LandingPage() {
 
       <section className="landing-hero" id="product">
         <div className="landing-copy">
-          <div className="landing-kicker"><span /> DOCKER, IN GOOD ORDER</div>
-          <h1>Your Docker workflow.<br /><em>Under control.</em></h1>
-          <p>Manage containers, monitor resources, deploy Compose environments and organize your Docker infrastructure from one workspace.</p>
+          <div className="landing-kicker"><span /> LOCAL DOCKER CONTROL</div>
+          <h1>Your Docker Engine.<br /><em>In clear view.</em></h1>
+          <p>Inspect live containers and resource use. Manage images, networks, volumes and Compose deployments from one focused workspace.</p>
           <div className="landing-hero-actions">
             <Link className="landing-button" to="/register">Get started <span aria-hidden="true">↗</span></Link>
             <a className="landing-text-link" href="#features">Explore the product <span aria-hidden="true">↓</span></a>
@@ -44,7 +44,6 @@ export function LandingPage() {
             <div className="preview-topbar">
               <span className="preview-brand-mark">D</span><strong>docker<span>pilot</span></strong>
               <span className="preview-sample-label">SAMPLE DATA</span>
-              <div className="preview-user-dot">JD</div>
             </div>
             <div className="preview-layout">
               <div className="preview-sidebar" aria-hidden="true">
@@ -55,7 +54,7 @@ export function LandingPage() {
                 <span>⌘ <i>Networks</i></span>
               </div>
               <div className="preview-main">
-                <div className="preview-heading-row"><div><small>WORKSPACE / LOCAL ENGINE</small><h2>Good morning, Jordan</h2></div><span className="preview-connected"><b /> Engine connected</span></div>
+                <div className="preview-heading-row"><div><small>DOCKER ENGINE / LOCAL</small><h2>Host overview</h2></div><span className="preview-connected"><b /> Engine connected</span></div>
                 <div className="preview-metrics">
                   <div><small>CONTAINERS</small><strong>08 <span>total</span></strong><p><b>5 running</b> · 3 stopped</p></div>
                   <div><small>CPU USAGE</small><strong>24<span>%</span></strong><div className="preview-meter"><i style={{ width: '24%' }} /></div></div>
@@ -69,33 +68,31 @@ export function LandingPage() {
                     </div>)}
                   </section>
                   <section className="preview-compose">
-                    <div className="preview-section-title"><strong>Compose</strong><span>01 ENV</span></div>
-                    <div className="preview-compose-card"><span className="preview-compose-icon">⌘</span><div><strong>storefront</strong><small>production · 3 services</small></div></div>
-                    <div className="preview-compose-status"><b /> Running <span>Updated just now</span></div>
+                    <div className="preview-section-title"><strong>Compose</strong><span>STACKS</span></div>
+                    <div className="preview-compose-card"><span className="preview-compose-icon">⌘</span><div><strong>Project stacks</strong><small>Services · logs · status</small></div></div>
+                    <div className="preview-compose-status"><b /> Managed together <span>Compose</span></div>
                   </section>
                 </div>
-                <div className="preview-activity"><span className="preview-activity-mark">↗</span><span><strong>Deployment started</strong><small>storefront · Compose environment</small></span><time>2m ago</time></div>
+                <div className="preview-activity"><span className="preview-activity-mark">⌕</span><span><strong>Inspect a container</strong><small>Details · logs · resource metrics</small></span><time>DOCKERPILOT</time></div>
               </div>
             </div>
           </div>
-          <div className="preview-float preview-float-health"><span className="preview-float-icon">⌁</span><span><small>ENGINE HEALTH</small><strong><i /> All systems ready</strong></span></div>
-          <div className="preview-float preview-float-compose"><span className="preview-compose-icon">⌘</span><span><small>COMPOSE DEPLOYMENT</small><strong>storefront <i>RUNNING</i></strong></span></div>
           <p className="preview-caption">Illustrative interface · sample values, not live Docker metrics</p>
         </div>
       </section>
 
       <section className="landing-trustline" aria-label="Product capabilities">
-        <span>ONE CLEAR VIEW</span><i />
-        <span>YOUR ENGINE, YOUR MACHINE</span><i />
-        <span>BUILT FOR THE WAY YOU SHIP</span>
+        <span>ENGINE METRICS</span><i />
+        <span>CONTAINER LOGS</span><i />
+        <span>COMPOSE LIFECYCLE</span>
       </section>
 
       <section className="landing-features" id="features">
-        <div className="landing-section-intro"><div className="landing-kicker"><span /> THE ESSENTIALS</div><h2>Less context switching.<br /><em>More shipping.</em></h2><p>A calm workspace for the parts of Docker that deserve your attention.</p></div>
+        <div className="landing-section-intro"><div className="landing-kicker"><span /> FROM ENGINE TO STACK</div><h2>Know what’s running.<br /><em>See what changed.</em></h2><p>Host metrics, container logs and deployment history stay close to the resources they describe.</p></div>
         <div className="landing-feature-list">
-          <article className="landing-feature-row"><span className="landing-feature-number">01</span><div><h3>See the whole host</h3><p>Check engine health, containers and resource use in one clear overview.</p></div><span className="landing-feature-symbol">◫</span></article>
-          <article className="landing-feature-row"><span className="landing-feature-number">02</span><div><h3>Run Compose with confidence</h3><p>Validate configurations, deploy environments, and follow their status and logs.</p></div><span className="landing-feature-symbol">⌘</span></article>
-          <article className="landing-feature-row"><span className="landing-feature-number">03</span><div><h3>Keep your resources organized</h3><p>Inspect containers, images, volumes and networks without losing the thread.</p></div><span className="landing-feature-symbol">▱</span></article>
+          <article className="landing-feature-row"><span className="landing-feature-number">01</span><div><h3>Read the host at a glance</h3><p>See Engine health, storage, container state and current CPU and memory use.</p></div><span className="landing-feature-symbol">◫</span></article>
+          <article className="landing-feature-row"><span className="landing-feature-number">02</span><div><h3>Trace a stack from config to logs</h3><p>Validate Compose files, manage deployment lifecycle and inspect recent service output.</p></div><span className="landing-feature-symbol">⌘</span></article>
+          <article className="landing-feature-row"><span className="landing-feature-number">03</span><div><h3>Keep Docker resources legible</h3><p>Find and inspect containers, images, volumes and networks with ownership context.</p></div><span className="landing-feature-symbol">▱</span></article>
         </div>
       </section>
 

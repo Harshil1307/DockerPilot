@@ -200,53 +200,56 @@ test('create, edit, validate configuration and show validation errors', async ({
 
 test('deploy, show status, and start stop restart with duplicate requests disabled', async ({ page }) => {
   const api = await installApiMocks(page, { lifecycleDelayMs: 300 });
-  page.on('dialog', (dialog) => dialog.accept());
   await api.openProject();
   await createEnvironment(page);
   await page.getByRole('button', { name: 'Validate' }).click();
   await expect(page.getByText('Configuration is valid', { exact: true })).toBeVisible();
   const card = page.locator('.compose-environment-card');
   await card.getByRole('button', { name: 'Deploy' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Deploy stack' }).click();
   await expect(card.getByText('Running', { exact: true })).toBeVisible();
   await card.getByRole('button', { name: 'Stop' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Stop' }).click();
   const stopping = card.getByRole('button', { name: 'Stopping…' });
   await expect(stopping).toBeDisabled();
   await expect(card.getByRole('button', { name: 'Restart' })).toBeDisabled();
   await expect(card.getByText('Stopped', { exact: true })).toBeVisible();
   await card.getByRole('button', { name: 'Start' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Start' }).click();
   await expect(card.getByText('Running', { exact: true })).toBeVisible();
   await card.getByRole('button', { name: 'Restart' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Restart' }).click();
   await expect(card.getByText('Running', { exact: true })).toBeVisible();
   expect(api.lifecycleCalls).toBe(3);
 });
 
 test('cleanup requires confirmation, reports failure, and offers retry', async ({ page }) => {
   const api = await installApiMocks(page, { failFirstCleanup: true });
-  const confirmations: string[] = [];
-  page.on('dialog', async (dialog) => { confirmations.push(dialog.message()); await dialog.accept(); });
   await api.openProject();
   await createEnvironment(page);
   await page.getByRole('button', { name: 'Validate' }).click();
   const card = page.locator('.compose-environment-card');
   await card.getByRole('button', { name: 'Deploy' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Deploy stack' }).click();
   await card.getByRole('button', { name: 'Cleanup', exact: true }).click();
+  const firstCleanupPrompt = page.getByRole('dialog');
+  await expect(firstCleanupPrompt).toContainText('Unlike Stop, it removes those resources');
+  await firstCleanupPrompt.getByRole('button', { name: 'Clean up stack' }).click();
   await expect(card.getByText('Cleanup failed', { exact: true })).toBeVisible();
   await expect(card.getByRole('button', { name: 'Retry cleanup' })).toBeVisible();
   await card.getByRole('button', { name: 'Retry cleanup' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Clean up stack' }).click();
   await expect(card.getByText('Removed', { exact: true })).toBeVisible();
-  const cleanupConfirmations = confirmations.filter((message) => message.startsWith('Clean up '));
-  expect(cleanupConfirmations).toHaveLength(2);
-  expect(cleanupConfirmations[0]).toContain('removes only the registered containers and networks');
 });
 
 test('monitoring shows inventory, metrics, selectable logs, and manual refresh', async ({ page }) => {
   const api = await installApiMocks(page);
-  page.on('dialog', (dialog) => dialog.accept());
   await api.openProject();
   await createEnvironment(page);
   await page.getByRole('button', { name: 'Validate' }).click();
   const card = page.locator('.compose-environment-card');
   await card.getByRole('button', { name: 'Deploy' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Deploy stack' }).click();
   await card.locator('summary', { hasText: 'Services, resource use & logs' }).click();
   await expect(card.getByRole('cell', { name: 'web' })).toBeVisible();
   await expect(card.getByText('12.5%', { exact: true })).toBeVisible();
@@ -260,12 +263,12 @@ test('monitoring shows inventory, metrics, selectable logs, and manual refresh',
 
 test('unavailable metrics and empty log output are labeled clearly', async ({ page }) => {
   const api = await installApiMocks(page, { unavailableMetrics: true, emptyLogs: true });
-  page.on('dialog', (dialog) => dialog.accept());
   await api.openProject();
   await createEnvironment(page);
   await page.getByRole('button', { name: 'Validate' }).click();
   const card = page.locator('.compose-environment-card');
   await card.getByRole('button', { name: 'Deploy' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Deploy stack' }).click();
   await card.locator('summary', { hasText: 'Services, resource use & logs' }).click();
   await expect(card.getByText('Unavailable', { exact: true }).first()).toBeVisible();
   await card.getByLabel('Select a container for logs').selectOption(CONTAINER_ID);
@@ -275,12 +278,12 @@ test('unavailable metrics and empty log output are labeled clearly', async ({ pa
 
 test('empty deployment inventory has a useful empty state', async ({ page }) => {
   const api = await installApiMocks(page, { emptyMonitoring: true });
-  page.on('dialog', (dialog) => dialog.accept());
   await api.openProject();
   await createEnvironment(page);
   await page.getByRole('button', { name: 'Validate' }).click();
   const card = page.locator('.compose-environment-card');
   await card.getByRole('button', { name: 'Deploy' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Deploy stack' }).click();
   await card.locator('summary', { hasText: 'Services, resource use & logs' }).click();
   await expect(card.getByText('No registered containers are available for this deployment.')).toBeVisible();
 });
@@ -288,12 +291,12 @@ test('empty deployment inventory has a useful empty state', async ({ page }) => 
 test('monitoring shows loading and errors; mobile layout avoids page overflow', async ({ page }) => {
   const api = await installApiMocks(page, { monitoringDelayMs: 500, monitoringError: true });
   page.setViewportSize({ width: 390, height: 844 });
-  page.on('dialog', (dialog) => dialog.accept());
   await api.openProject();
   await createEnvironment(page);
   await page.getByRole('button', { name: 'Validate' }).click();
   const card = page.locator('.compose-environment-card');
   await card.getByRole('button', { name: 'Deploy' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Deploy stack' }).click();
   await card.locator('summary', { hasText: 'Services, resource use & logs' }).click();
   await expect(card.getByText('Loading deployment details…')).toBeVisible();
   await expect(card.getByRole('alert')).toContainText('Docker monitoring is temporarily unavailable.');

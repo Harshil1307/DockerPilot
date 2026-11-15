@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createLocalAgentPairingChallenge, listLocalAgents, revokeLocalAgent, type LocalAgent } from '../lib/api';
+import { useConfirm } from './ConfirmDialog';
 
 interface PairingChallenge {
   code: string;
@@ -7,6 +8,7 @@ interface PairingChallenge {
 }
 
 export function LocalAgentPanel({ localEngineReachable }: { localEngineReachable: boolean | null }) {
+  const confirm = useConfirm();
   const [agents, setAgents] = useState<LocalAgent[]>([]);
   const [pairing, setPairing] = useState<PairingChallenge | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,7 +65,7 @@ export function LocalAgentPanel({ localEngineReachable }: { localEngineReachable
   }
 
   async function revoke(agent: LocalAgent) {
-    if (!window.confirm(`Revoke “${agent.name}”? That computer will lose access to this DockerPilot account.`)) return;
+    if (!await confirm({ title: `Revoke “${agent.name}”?`, message: 'That computer will lose access to this DockerPilot account.', confirmLabel: 'Revoke access', destructive: true })) return;
     setWorking(true);
     setError(null);
     try {
@@ -91,7 +93,7 @@ export function LocalAgentPanel({ localEngineReachable }: { localEngineReachable
       <span><strong>{activeAgent.name}</strong><small>{activeAgent.connected ? 'Connected to DockerPilot' : 'Paired; start the agent on this computer to connect'}</small></span>
       <button className="danger-button" type="button" onClick={() => void revoke(activeAgent)} disabled={working}>Revoke</button>
     </div> : <div className="local-agent-actions">
-      <p>Pair your expo computer with the account you’re signed into here.</p>
+      <p>Pair this computer with the account you’re signed into here.</p>
       <button className="primary-button" type="button" onClick={() => void startPairing()} disabled={working}>{working ? 'Creating code…' : 'Pair this computer'}</button>
     </div>}
 
