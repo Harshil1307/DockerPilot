@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+const optionalValue = z.preprocess((value) => value === '' ? undefined : value, z.string().trim().min(1).optional());
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
@@ -9,6 +11,16 @@ const envSchema = z.object({
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   DOCKER_SOCKET_PATH: z.string().trim().min(1).optional(),
   DOCKER_CONNECTION_MODE: z.enum(['local', 'agent']).default('local'),
+  GOOGLE_CLIENT_ID: optionalValue,
+  GOOGLE_CLIENT_SECRET: optionalValue,
+  GOOGLE_OAUTH_REDIRECT_URI: z.preprocess((value) => value === '' ? undefined : value, z.string().url().optional()),
+}).superRefine((value, context) => {
+  if (Boolean(value.GOOGLE_CLIENT_ID) !== Boolean(value.GOOGLE_CLIENT_SECRET)) {
+    context.addIssue({ code: 'custom', message: 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured together.' });
+  }
+  if (value.GOOGLE_CLIENT_ID && !value.GOOGLE_OAUTH_REDIRECT_URI) {
+    context.addIssue({ code: 'custom', message: 'GOOGLE_OAUTH_REDIRECT_URI is required when Google OAuth credentials are configured.' });
+  }
 });
 
 const result = envSchema.safeParse(process.env);

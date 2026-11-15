@@ -187,8 +187,9 @@ export interface DockerContainerMonitoring {
 export interface DockerContainerDetails {
   id: string; name: string; serviceName: string | null; state: string; health: string | null; image: string;
   createdAt: string | null; startedAt: string | null; restartPolicy: { name: string; maximumRetryCount: number };
-  publishedPorts: string[]; networks: { name: string; id: string | null }[];
+  publishedPorts: string[]; networks: { name: string; id: string | null; ipAddress: string | null }[];
   mounts: { type: string; name: string | null; destination: string; readOnly: boolean }[];
+  environmentNames: string[];
   memoryLimitBytes: number | null; cpuLimitCores: number | null;
 }
 
@@ -600,6 +601,14 @@ export function deleteProject(id: string): Promise<void> {
 export async function registerAccount(input: Credentials & { name: string }): Promise<User> {
   const result = await request<{ user: User }>('/auth/register', { method: 'POST', body: JSON.stringify(input) });
   return result.user;
+}
+
+export function getGoogleAuthConfig(): Promise<{ enabled: boolean }> {
+  return request<{ enabled: boolean }>('/auth/google/config');
+}
+
+export function googleAuthStartUrl(): string {
+  return `${apiBaseUrl}/api/auth/google`;
 }
 
 export async function loginAccount(input: Credentials): Promise<User> {

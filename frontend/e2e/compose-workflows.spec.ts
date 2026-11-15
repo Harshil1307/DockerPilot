@@ -70,6 +70,7 @@ async function installApiMocks(page: Page, options: MockOptions = {}) {
     if (path === '/docker/status') return json({ reachable: true, engine: { version: '29.8.0', apiVersion: '1.51', operatingSystem: 'Docker Desktop', architecture: 'arm64' } });
     if (path === '/docker/containers') return json([]);
     if (path === `/projects/${PROJECT_ID}` && method === 'GET') return json(PROJECT);
+    if (path === `/projects/${PROJECT_ID}/stack-doctor` && method === 'GET') return json([]);
     if (path === `/projects/${PROJECT_ID}/compose` && method === 'GET') return json(summary() ? [summary()] : []);
 
     if (path === `/projects/${PROJECT_ID}/compose` && method === 'POST') {

@@ -24,6 +24,8 @@ export type PublicUser = {
   updatedAt: Date;
 };
 
+export interface VerifiedGoogleIdentity { subject: string; email: string; name: string }
+
 export const authService = {
   async register(name: string, email: string, password: string): Promise<{ user: PublicUser; token: string }> {
     const existingUser = await prisma.user.findUnique({ where: { email }, select: { id: true } });
@@ -57,6 +59,39 @@ export const authService = {
 
     const { passwordHash: _passwordHash, ...safeUser } = user;
     return { user: safeUser, token: createSessionToken(user.id) };
+  },
+
+  async loginWithGoogle(identity: VerifiedGoogleIdentity): Promise<{ user: PublicUser; token: string }> {
+    const existingSubject = await prisma.user.findUnique({ where: { googleSubject: identity.subject }, select: publicUserSelect });
+    if (existingSubject) return { user: existingSubject, token: createSessionToken(existingSubject.id) };
+
+    const existingEmail = await prisma.user.findUnique({ where: { email: identity.email } });
+    if (existingEmail) {
+      if (existingEmail.googleSubject) throw new AppError('This email address is already linked to a different Google account.', 409, 'GOOGLE_ACCOUNT_CONFLICT');
+      const linked = await prisma.user.updateMany({ where: { id: existingEmail.id, googleSubject: null }, data: { googleSubject: identity.subject } });
+      const linkedUser = await prisma.user.findUnique({ where: { id: existingEmail.id } });
+      if (linked.count !== 1 || !linkedUser || linkedUser.googleSubject !== identity.subject) {
+        throw new AppError('This email address could not be securely linked to Google.', 409, 'GOOGLE_ACCOUNT_CONFLICT');
+      }
+      const { googleSubject: _googleSubject, passwordHash: _passwordHash, ...user } = linkedUser;
+      return { user, token: createSessionToken(user.id) };
+    }
+
+    const passwordHash = await bcrypt.hash(randomBytes(32).toString('hex'), PASSWORD_HASH_ROUNDS);
+    try {
+      const user = await prisma.user.create({
+        data: { name: identity.name, email: identity.email, googleSubject: identity.subject, passwordHash },
+        select: publicUserSelect,
+      });
+      return { user, token: createSessionToken(user.id) };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const raced = await prisma.user.findUnique({ where: { googleSubject: identity.subject }, select: publicUserSelect });
+        if (raced) return { user: raced, token: createSessionToken(raced.id) };
+        throw new AppError('This Google account could not be linked to DockerPilot.', 409, 'GOOGLE_ACCOUNT_CONFLICT');
+      }
+      throw error;
+    }
   },
 
   async getCurrentUser(userId: string): Promise<PublicUser> {

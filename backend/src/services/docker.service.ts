@@ -93,8 +93,9 @@ export interface DockerContainerOwnershipMetadata {
 export interface DockerContainerDetails extends ComposeContainerDetails {
   restartPolicy: { name: string; maximumRetryCount: number };
   publishedPorts: string[];
-  networks: { name: string; id: string | null }[];
   mounts: { type: string; name: string | null; destination: string; readOnly: boolean }[];
+  environmentNames: string[];
+  networks: { name: string; id: string | null; ipAddress: string | null }[];
   memoryLimitBytes: number | null;
   cpuLimitCores: number | null;
 }
@@ -503,8 +504,9 @@ export const dockerService = {
         restartPolicy: { name: info.HostConfig?.RestartPolicy?.Name ?? 'no', maximumRetryCount: info.HostConfig?.RestartPolicy?.MaximumRetryCount ?? 0 },
         publishedPorts: [...new Set(Object.entries(info.NetworkSettings?.Ports ?? {}).flatMap(([containerPort, bindings]) =>
           (bindings ?? []).map((binding) => `${binding.HostPort}:${containerPort}`)))],
-        networks: Object.entries(info.NetworkSettings?.Networks ?? {}).map(([name, network]) => ({ name, id: network.NetworkID ?? null })),
         mounts: (info.Mounts ?? []).map((mount) => ({ type: mount.Type, name: mount.Type === 'volume' ? mount.Name ?? null : null, destination: mount.Destination, readOnly: !mount.RW })),
+        environmentNames: (info.Config?.Env ?? []).map((entry) => entry.slice(0, entry.indexOf('=') < 0 ? entry.length : entry.indexOf('='))).filter((name) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)).sort(),
+        networks: Object.entries(info.NetworkSettings?.Networks ?? {}).map(([name, network]) => ({ name, id: network.NetworkID ?? null, ipAddress: network.IPAddress || null })),
         memoryLimitBytes: info.HostConfig?.Memory && info.HostConfig.Memory > 0 ? info.HostConfig.Memory : null,
         cpuLimitCores: cpu,
       };

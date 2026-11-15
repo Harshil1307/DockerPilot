@@ -16,7 +16,7 @@ The React, TypeScript, and Vite frontend calls an Express API. The API uses Pris
 
 ## Requirements
 
-- Node.js 20.19+ or 22.12+
+- Node.js 22.12+ (Google Sign-In uses a Node 22 compatible Google auth client)
 - npm 10+
 - Docker with Docker Compose
 
@@ -62,6 +62,8 @@ For a production deployment, use `npm run db:deploy` to apply committed migratio
 For Render setup, see [Render deployment](docs/render-deployment.md) and the root [`render.yaml`](render.yaml). The Blueprint is configured with free preview plans; its free PostgreSQL database expires after 30 days and must not hold data that needs to persist.
 
 Create an account at `/register`, then sign in at `/login`. Sessions use an HTTP-only cookie; project routes require that session and only return or modify the signed-in user's projects. Project registration and management are available through `POST`, `GET`, `PATCH`, and `DELETE /api/projects` (single-project operations use `/api/projects/:id`). The dashboard reads project records from this API; the API uses Prisma to store them in PostgreSQL.
+
+Google Sign-In is optional and leaves email/password authentication available. To enable it, create an OAuth 2.0 Client ID of type **Web application** in Google Cloud Console, configure the OAuth consent screen, and add the exact callback URL `http://localhost:4000/api/auth/google/callback` under **Authorized redirect URIs** for local development. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_OAUTH_REDIRECT_URI` in `backend/.env`; the redirect URI must match the Google Cloud entry exactly. For production, add the HTTPS API callback URL (for example, `https://api.example.com/api/auth/google/callback`) to the same client and set the production values in the API secret manager. Set all three variables or leave all three unset. The backend verifies Google's ID token, audience, nonce, state, PKCE exchange, and verified email before creating a session. Existing accounts with a matching verified email are linked to that Google identity. Never commit the client secret.
 
 The dashboard's Docker section reads local Engine status and container summaries from `GET /api/docker/status` and `GET /api/docker/containers`. It can start, stop, and restart eligible containers through authenticated `POST /api/docker/containers/:id/start`, `/stop`, and `/restart` routes. Dockerode uses its local default connection when possible and detects Docker Desktop's per-user macOS socket dynamically. If your Docker setup needs a different socket, set `DOCKER_SOCKET_PATH` in `backend/.env`; it is optional and must never be exposed through the frontend.
 

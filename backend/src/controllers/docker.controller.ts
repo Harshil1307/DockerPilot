@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { AppError } from '../errors/app-error.js';
 import { dockerOverviewService, dockerService } from '../services/docker.service.js';
 import { composeDeploymentOwnershipService } from '../services/compose-ownership.service.js';
-import { calculateContainerMetrics, parseDockerLogBuffer, withMonitoringTimeout } from '../services/compose-monitoring.service.js';
+import { parseDockerLogBuffer, withMonitoringTimeout } from '../services/compose-monitoring.service.js';
+import { createContainerMonitoringService } from '../services/container-monitoring.service.js';
 
 const containerIdSchema = z.string().regex(/^(?:[a-f\d]{12}|[a-f\d]{64})$/i, 'Container ID must be a 12 or 64 character Docker ID.');
 
@@ -36,23 +37,7 @@ export const getDockerContainerLogs: RequestHandler = async (request, response) 
 };
 
 export const getDockerContainerMonitoring: RequestHandler = async (request, response) => {
-  const userId = requireUserId(request.userId);
-  const containers = await dockerService.listContainers(userId);
-  const eligible = containers.filter((container) => container.state === 'running').slice(0, 20);
-  const metrics = new Map<string, { cpuPercent: number | null; memoryUsageBytes: number | null; memoryLimitBytes: number | null; memoryPercent: number | null }>();
-  for (let index = 0; index < eligible.length; index += 4) {
-    await Promise.all(eligible.slice(index, index + 4).map(async (container) => {
-      try {
-        const stats = await withMonitoringTimeout(dockerService.getContainerStats(container.id), 12_000, 'CONTAINER_STATS_TIMEOUT');
-        metrics.set(container.id, calculateContainerMetrics(stats));
-      } catch { metrics.set(container.id, calculateContainerMetrics(null)); }
-    }));
-  }
-  response.status(200).json({ sampledAt: new Date().toISOString(), containers: containers.map((container) => ({
-    id: container.id,
-    metrics: metrics.get(container.id) ?? calculateContainerMetrics(null),
-    metricsUnavailableReason: container.state !== 'running' ? 'Container is not running.' : eligible.includes(container) ? 'Statistics are unavailable.' : 'Statistics are limited to the first 20 running containers per refresh.',
-  })) });
+  response.status(200).json(await createContainerMonitoringService(dockerService).sample(requireUserId(request.userId)));
 };
 
 function requireContainerId(value: unknown): string {
