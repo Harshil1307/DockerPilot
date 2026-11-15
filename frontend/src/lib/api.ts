@@ -50,6 +50,13 @@ export interface ProjectInput {
   repositoryUrl: string | null;
 }
 
+export interface StackDoctorIssue { key: string; severity: 'CRITICAL' | 'WARNING' | 'INFORMATIONAL'; title: string; description: string; whyItMatters: string; recommendation: string; evidence: string; service: string | null }
+export interface StackDoctorReport { projectId: string; scannedAt: string; healthScore: number; checksPerformed: number; passedChecks: number; warningCount: number; criticalCount: number; issues: StackDoctorIssue[] }
+export interface StackDoctorScanRecord { id: string; report: StackDoctorReport; createdAt: string }
+export function runStackDoctorScan(projectId: string): Promise<StackDoctorReport> { return request(`/projects/${encodeURIComponent(projectId)}/stack-doctor`, { method: 'POST', body: '{}' }); }
+export function getStackDoctorHistory(projectId: string): Promise<StackDoctorScanRecord[]> { return request(`/projects/${encodeURIComponent(projectId)}/stack-doctor`); }
+export function compareStackDoctorScan(projectId: string, scanId: string): Promise<{ current: StackDoctorScanRecord; previous: StackDoctorScanRecord | null; resolved: string[]; outstanding: string[]; newIssues: string[] }> { return request(`/projects/${encodeURIComponent(projectId)}/stack-doctor/${encodeURIComponent(scanId)}/compare`); }
+
 export type ComposeValidationStatus = 'NOT_VALIDATED' | 'VALID' | 'INVALID';
 export type ComposeDeploymentStatus = 'NOT_DEPLOYED' | 'DEPLOYING' | 'RUNNING' | 'FAILED' | 'STOPPED' | 'CLEANING' | 'CLEANUP_FAILED' | 'REMOVED';
 

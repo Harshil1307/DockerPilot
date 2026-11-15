@@ -13,6 +13,7 @@ import { composeEnvironmentRouter, projectComposeRouter } from './routes/compose
 import { activityRouter } from './routes/activity.routes.js';
 import { localAgentRouter } from './routes/local-agent.routes.js';
 import { corsOptions } from './config/cors.js';
+import { stackDoctorRouter } from './routes/stack-doctor.routes.js';
 
 export const AUTH_API_PREFIX = '/api/auth';
 
@@ -35,6 +36,7 @@ app.use('/api/agents', localAgentRouter);
 app.use('/api/docker', dockerRouter);
 app.use('/api/projects', projectRouter);
 app.use('/api/projects/:projectId/compose', projectComposeRouter);
+app.use('/api/projects/:projectId/stack-doctor', stackDoctorRouter);
 app.use('/api/compose', composeEnvironmentRouter);
 app.use((_request, response) => {
   response.status(404).json({ error: 'Not found' });

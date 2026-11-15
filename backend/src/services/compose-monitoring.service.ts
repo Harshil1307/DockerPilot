@@ -103,6 +103,8 @@ export interface ComposeContainerInventoryItem {
   image: string | null;
   createdAt: string | null;
   startedAt: string | null;
+  restartCount?: number;
+  hasResourceLimits?: boolean;
   metrics: ContainerMetrics;
   metricsUnavailableReason: string | null;
 }
@@ -252,6 +254,8 @@ export function createComposeMonitoringService(
           image: details.image,
           createdAt: details.createdAt,
           startedAt: details.startedAt,
+          restartCount: details.restartCount,
+          hasResourceLimits: details.hasResourceLimits,
           metrics,
           metricsUnavailableReason,
         };

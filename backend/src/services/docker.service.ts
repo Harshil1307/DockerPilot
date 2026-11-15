@@ -81,6 +81,8 @@ export interface ComposeContainerDetails {
   createdAt: string | null;
   startedAt: string | null;
   labels: Record<string, string>;
+  restartCount?: number;
+  hasResourceLimits?: boolean;
 }
 
 export interface DockerContainerOwnershipMetadata {
@@ -496,6 +498,8 @@ export const dockerService = {
         createdAt: info.Created && Number.isFinite(Date.parse(info.Created)) ? new Date(info.Created).toISOString() : null,
         startedAt: info.State.StartedAt && Number.isFinite(Date.parse(info.State.StartedAt)) ? new Date(info.State.StartedAt).toISOString() : null,
         labels,
+        restartCount: info.RestartCount ?? 0,
+        hasResourceLimits: Boolean((info.HostConfig?.Memory ?? 0) > 0 || (info.HostConfig?.NanoCpus ?? 0) > 0 || (info.HostConfig?.CpuQuota ?? 0) > 0),
         restartPolicy: { name: info.HostConfig?.RestartPolicy?.Name ?? 'no', maximumRetryCount: info.HostConfig?.RestartPolicy?.MaximumRetryCount ?? 0 },
         publishedPorts: [...new Set(Object.entries(info.NetworkSettings?.Ports ?? {}).flatMap(([containerPort, bindings]) =>
           (bindings ?? []).map((binding) => `${binding.HostPort}:${containerPort}`)))],
@@ -620,6 +624,8 @@ export const dockerService = {
           ? new Date(info.State.StartedAt).toISOString()
           : null,
         labels,
+        restartCount: info.RestartCount ?? 0,
+        hasResourceLimits: Boolean((info.HostConfig?.Memory ?? 0) > 0 || (info.HostConfig?.NanoCpus ?? 0) > 0 || (info.HostConfig?.CpuQuota ?? 0) > 0),
       };
     } catch (error) {
       if (isDockerNotFound(error)) return null;

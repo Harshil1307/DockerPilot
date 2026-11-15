@@ -3,6 +3,7 @@ import { Link, NavLink, Route, Routes, useLocation, useNavigate, useParams } fro
 import { useAuth } from './auth/AuthContext';
 import { AuthPage } from './components/AuthPage';
 import { ComposeEnvironments } from './components/ComposeEnvironments';
+import { StackDoctorPanel } from './components/StackDoctorPanel';
 import { ImageManagementPage } from './components/ImageManagementPage';
 import { VolumeManagementPage } from './components/VolumeManagementPage';
 import { NetworkManagementPage } from './components/NetworkManagementPage';
@@ -272,6 +273,7 @@ function ProjectDetailPage() {
               </section>
             )}
             <ComposeEnvironments projectId={project.id} />
+            <StackDoctorPanel projectId={project.id} />
           </>
         )}
       </main>
