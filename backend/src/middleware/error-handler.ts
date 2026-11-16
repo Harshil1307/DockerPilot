@@ -4,7 +4,7 @@ import { ZodError } from 'zod';
 import { AppError } from '../errors/app-error.js';
 import { DockerUnavailableError } from '../errors/docker-unavailable-error.js';
 
-export const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
+export const errorHandler: ErrorRequestHandler = (error, request, response, _next) => {
   if (error instanceof AppError) {
     response.status(error.statusCode).json({ error: error.message, code: error.code });
     return;
@@ -41,9 +41,10 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
 
   if (
     error instanceof Prisma.PrismaClientInitializationError
-    || (error instanceof Prisma.PrismaClientKnownRequestError && ['P1001', 'P1002', 'P1008', 'P2024'].includes(error.code))
+    || (error instanceof Prisma.PrismaClientKnownRequestError && ['P1000', 'P1001', 'P1002', 'P1003', 'P1008', 'P1010', 'P1011', 'P1017', 'P2024'].includes(error.code))
   ) {
-    console.error('[api:error] PostgreSQL is unavailable for this request.');
+    const prismaCode = error instanceof Prisma.PrismaClientKnownRequestError ? error.code : 'INITIALIZATION';
+    console.error(`[api:error] PostgreSQL request failed (${prismaCode}).`);
     response.status(503).json({
       error: 'Database unavailable. Check that PostgreSQL is running and DATABASE_URL points to it.',
       code: 'DATABASE_UNAVAILABLE',
@@ -51,7 +52,10 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, _ne
     return;
   }
 
-  // Do not serialize or print unknown errors: Docker/API errors can contain secrets or connection details.
-  console.error('[api:error] Unhandled request failure.');
+  // Keep diagnostics useful without printing raw database, Docker, or request data.
+  const errorName = error instanceof Error ? error.name : 'UnknownError';
+  const requestId = request.get('cf-ray');
+  const safeRequestId = requestId && /^[a-f\d]{8,32}-[a-z\d-]{1,40}$/i.test(requestId) ? ` request=${requestId}` : '';
+  console.error(`[api:error] Unhandled request failure (${errorName}).${safeRequestId}`);
   response.status(500).json({ error: 'Internal server error', code: 'INTERNAL_SERVER_ERROR' });
 };

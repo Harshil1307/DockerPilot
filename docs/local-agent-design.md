@@ -1,8 +1,10 @@
 # Hosted Docker access through a local agent
 
-## Goal
+## Goal and implementation status
 
 Let the hosted DockerPilot API manage the Docker Engine on a user's own computer without exposing a Docker socket or accepting inbound connections to that computer. The same design must support one agent for the current expo demo and separate agents for other users later.
+
+The authenticated outbound relay, single-use pairing, revocation, reconnect loop, typed operation allowlist, and account ownership checks are implemented. The agent is still distributed as source and requires Node.js. The in-memory relay accepts only one live agent per account; selecting between multiple computers on one account is not implemented.
 
 ## Connection shape
 
@@ -36,14 +38,14 @@ Set strict message-size, response-size, concurrency, and execution-time limits. 
 
 ## Persistence and account boundaries
 
-Represent each agent as an account-owned device with created/last-seen/revoked timestamps and a hashed credential. Pairing challenges are single-use and expire. A user may later pair more than one device; each request is routed only to an active device owned by that authenticated account. The current product still treats one Docker daemon as one trusted operator's environment; account records do not isolate several users sharing that daemon.
+Each agent is an account-owned device with created/last-seen/revoked timestamps and a hashed credential. Pairing challenges are single-use and expire. Multiple device records may exist for an account, but only one live socket may connect per account and requests have no device selector yet. In local backend mode, do not treat account records as isolation between multiple users sharing one Docker daemon.
 
-## Rollout
+## Remaining rollout work
 
-1. Implement the schema, pairing API, revocation API, and protocol unit tests.
-2. Implement the local agent process and an in-memory broker for one Render API instance. Keep the Render service at one instance until relay state has a shared store or durable broker.
-3. Route Docker operations through typed agent operations while keeping local development's direct Docker connection intact.
-4. Add a clear device connection state in the UI and verify the deployed Vercel-to-Render-to-local-Docker path on the expo Mac.
-5. Document installation, pairing, update, revocation, reconnect, and troubleshooting steps before inviting other laptops.
-
-Do not enable hosted Docker controls until the complete relay path, authorization checks, revocation, timeout behavior, and deployment configuration have been verified together.
+- [x] Pairing schema/API, credential revocation, authenticated outbound relay, and agent command allowlist.
+- [x] Route Docker operations through typed agent operations while preserving local mode.
+- [x] Show agent connectivity and pairing instructions in the website.
+- [ ] Build, sign, and publish no-runtime-required Windows and macOS installers.
+- [ ] Add device selection and support multiple live agents per account.
+- [ ] Move relay and rate-limit state to a shared store before scaling the API beyond one instance.
+- [ ] Exercise the deployed Vercel-to-Render-to-local-Docker path on clean Windows and macOS machines, including account isolation and reconnection.

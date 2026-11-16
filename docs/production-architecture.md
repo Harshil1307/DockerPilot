@@ -1,17 +1,17 @@
 # Production architecture decision
 
-## Decision for the current release
+## Current architecture
 
-Use DockerPilot as a **single-operator, self-hosted installation**. Run the web frontend, API, PostgreSQL, and Docker Engine in the same trusted environment. A reverse proxy may provide HTTPS and serve the frontend and `/api` on the same origin. The browser never receives a Docker socket path or daemon credential. Do not expose the API or Docker socket directly to the public internet.
+DockerPilot supports two execution modes. Local development/self-hosting can run the API beside a local Docker Engine. The hosted deployment uses `DOCKER_CONNECTION_MODE=agent`: the API keeps accounts, projects, and deployment records, while a paired local agent makes an authenticated outbound WSS connection and operates only its own computer's Docker Engine. The browser never receives a Docker socket path or daemon credential. Do not expose Docker's socket or an unauthenticated Docker API.
 
-This is the only architecture the current code can safely support without changing its Docker execution model. The current API runs Dockerode and the Compose CLI directly against one local daemon. Some Docker inventories are host-wide, so application account separation does not currently provide per-user isolation over a shared daemon. Keep one trusted operator per DockerPilot installation and one Docker daemon per installation.
+In agent mode, requests are routed using the authenticated account and only that account's agent connection. Project records are account-scoped, Compose deployment names derive from unique environment IDs, and destructive Compose operations verify account and Docker ownership labels. The current in-memory relay permits only one connected agent per account and requires one API instance. Do not run several accounts against one shared local Docker daemon in local mode; host-wide inventory in that mode is not an account boundary.
 
 ```mermaid
 flowchart LR
-  Browser[Operator browser] -->|HTTPS same origin| Proxy[Reverse proxy / static frontend]
-  Proxy -->|/api| API[DockerPilot API]
-  API -->|Prisma| DB[(PostgreSQL persistent volume)]
-  API -->|Local Docker API and Compose CLI| Engine[Docker Engine on same trusted host]
+  Browser[User browser] -->|HTTPS same-origin REST| API[DockerPilot API]
+  API -->|Prisma| DB[(PostgreSQL)]
+  Agent[Paired local agent] -->|Authenticated outbound WSS| API
+  Agent -->|Local Docker API and Compose CLI| Engine[User's local Docker Engine]
   API -->|Signed HttpOnly cookie| Browser
 ```
 
@@ -23,11 +23,11 @@ flowchart LR
 | Hosted frontend + user-hosted backend | Docker can stay beside the user's backend, but the browser must reach that backend. Public HTTPS exposure of the management API creates a sensitive attack surface; same-site cookie and CORS constraints also complicate setup. | Medium initially, but secure ingress, TLS, origin configuration, upgrades, and remote access support remain user responsibilities. | Low hosted frontend cost; each user runs and exposes a server. | Friction and networking setup vary by user. |
 | Self-hosted frontend + backend + database + Docker daemon together | Smallest attack surface when bound to loopback/private network and protected by an HTTPS proxy. Docker socket stays local to the trusted backend. | Lowest; matches current services and ownership checks. | Can run on an existing machine at no additional hosting charge; operator maintains backups and updates. | Reliable for local/private use, but does not provide a shared public SaaS. |
 
-## Public multi-user architecture: future design, not implemented
+## Hosted agent mode and remaining limits
 
-The hosted control plane now pairs with a separately running local agent. The agent makes an outbound TLS connection, pairs through a short-lived single-use code, and receives narrowly typed operations over an authenticated channel. The server authorizes the account and environment on every request; the agent enforces a command allowlist and verifies resource ownership locally. Credentials are revocable, request IDs and expiries are checked, payloads and logs are bounded, operations have timeouts, and reconnects are supported. The browser never supplies shell text, arbitrary Docker API paths, or a Docker socket. Docker credentials are not stored at the control plane.
+The hosted control plane pairs with a separately running local agent. Pairing uses a five-minute single-use code and a revocable credential. The server routes typed operations over an authenticated channel; the agent validates payloads and enforces its operation allowlist. Credentials are hashed by the API and stored with owner-only file permissions by the agent. The browser never supplies shell text, arbitrary Docker API paths, or a Docker socket.
 
-For the current single-computer expo setup, configure the hosted backend for agent mode and keep the agent running on the Mac during the presentation. Each additional user's computer must be paired separately from that user's signed-in account. Keep the API and agent software updated, and revoke lost or retired computers from the account's device list.
+The website now displays ordered Docker Desktop, Engine verification, agent preview, pairing, and developer database steps. Standalone Windows/macOS installers are not published, so current pairing still requires Git, Node.js, and a source checkout. Multiple computers per account, shared relay state, and multi-instance rate-limit storage are not implemented. See [Expo readiness](expo-readiness.md) before presenting this as a public SaaS.
 
 ## Production constraints
 

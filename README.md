@@ -126,7 +126,7 @@ It requires PostgreSQL with migrations applied, a reachable Docker daemon, and t
 
 ## Production readiness and launch status
 
-- The current application has a hosted control plane and local agent relay, but it is **not ready for public hosted-user onboarding**. Packaged installers, complete first-run wizard, multi-computer-per-account routing, and shared rate-limit storage remain outstanding.
+- The current application has a hosted control plane, local agent relay, and ordered first-run connection guide, but it is **not ready for no-clone public onboarding**. Packaged installers, multi-computer-per-account routing, and shared rate-limit storage remain outstanding.
 - Never expose the Docker socket or an unauthenticated Docker API. Keep the hosted API at one instance while its relay and rate limiter remain in memory. Review [production architecture](docs/production-architecture.md) and [Expo readiness](docs/expo-readiness.md).
 - Production configuration now requires HTTPS `FRONTEND_ORIGIN` and a non-placeholder JWT secret, has a database readiness endpoint, supports bounded graceful shutdown, and documents trusted proxy configuration. Keep one API instance because rate limiting remains in-memory.
 - The online dependency audit reports three high-severity affected packages in the same Prisma 6 dependency chain (`deepmerge-ts`, `@prisma/config`, and `prisma`). A safe fix requires a tested Prisma 7 upgrade; this remains a public-release blocker and is documented in [operations](docs/operations.md).

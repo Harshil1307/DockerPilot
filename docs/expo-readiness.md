@@ -16,7 +16,8 @@ Audit date: 2026-11-16
 - [ ] Distributed rate-limit storage: current counters are process-local; keep one API instance or configure a shared store before scaling.
 - [ ] Device selection and multiple computers per account: relay currently accepts only one connected agent per account, and Docker operations route to that single connection.
 - [ ] User-ready installers: no Windows or macOS installer artifacts or release publishing workflow exist. The current agent requires Node.js and a repository checkout.
-- [ ] Hosted first-run onboarding: no complete onboarding wizard or developer setup separation exists in the UI.
+- [x] Hosted connection steps now guide users through Docker Desktop, `docker version`, agent preview setup, pairing, and developer-only PostgreSQL setup.
+- [ ] No-clone hosted use: standalone signed Windows/macOS agent installers are still not published; the preview path requires Git, Node.js, and a source checkout.
 - [ ] Production configuration and credentials: OAuth, persistent PostgreSQL/backups, domains, TLS, and deployment secrets require operator configuration.
 - [ ] Two-user/two-daemon end-to-end test: requires two accounts and independently running Docker engines; not available in this local audit.
 - [ ] Windows agent execution/install: not verified in this macOS workspace.
@@ -25,6 +26,23 @@ Audit date: 2026-11-16
 ## Confirmed reliability adjustment
 
 Registration now counts failed attempts rather than successful account creations. This keeps repeated successful registrations from exhausting the same IP budget on shared networks while retaining the five-failure limit. Login already used the same failed-attempt behavior. This is an in-process limiter and is not a substitute for shared storage on a multi-instance deployment.
+
+Unhandled backend failures now log only the error class and a validated Render `CF-Ray` request ID, never the raw exception message. Common Prisma connection/authentication failures return a safe database-unavailable response and a stable error code. Frontend requests now show retry guidance for rate-limit and transient server responses. This improves diagnosis and user recovery; it does not establish the root cause of any past account-creation error. Render logs for the failing request are required to prove that.
+
+## Hosting assessment (2026-11-16)
+
+The error may be caused by application/database behavior, the free instance waking from idle, inbound rate limiting, database connection limits, or a platform event. No Render request logs or failing request identifiers were available in this audit, so it would be incorrect to claim a confirmed Render root cause.
+
+Render's official free-service documentation says a free web service sleeps after 15 minutes without inbound traffic and takes about a minute to spin back up. Its free PostgreSQL expires after 30 days, is limited to 1 GB, has no backups, and lacks managed connection pooling. Render also documents that inbound request rate limiting can affect free services and that a 500 may come from application exceptions, unstable PostgreSQL connections, or exhausted resources. Its REST API rate limits apply to management API requests, not ordinary DockerPilot website requests. See [free instance limits](https://render.com/docs/free), [Render 429/500 troubleshooting](https://render.com/docs/troubleshooting-deploys), and [Render REST API rate limits](https://api-docs.render.com/reference/rate-limiting).
+
+| Option | Fit for this project | Decision |
+| --- | --- | --- |
+| Render paid web service + persistent paid PostgreSQL | Keeps the existing Blueprint, WebSocket relay, region, and migration workflow. Removes free-tier sleep/expiry limits, subject to actual plan selection and budget. | **Recommended for the expo.** Inspect Render logs for the registration failure, move off free resources, and keep one API instance until relay/rate-limit state is shared. No provider migration needed. |
+| Railway Hobby | Official pricing currently shows a $5/month minimum with $5 included usage; deploys Node/PostgreSQL and can support a small demonstration. Service and volume configuration would need porting and redeployment. | Viable alternative if Render's paid service remains unreliable; migration adds risk and there is no evidence yet that it is necessary. See [Railway pricing](https://railway.com/pricing). |
+| Fly.io | Flexible Machines are usage-priced, but its official Managed Postgres currently starts at $38/month before storage. More infrastructure setup and operational work than this expo needs. | Not the student-budget default. See [Fly Machines pricing](https://fly.io/pricing-update/) and [Managed Postgres pricing](https://fly.io/docs/mpg/). |
+| Vercel Functions for the backend | Existing Vercel frontend is static and works well there. A function-based API would require redesigning the persistent WebSocket agent relay and replacing in-memory routing/rate limits with shared services. | Not a drop-in replacement for the current Express backend. Vercel documents a 120-second proxy timeout and plan-specific function limits; see [Vercel limits](https://vercel.com/docs/limits). |
+
+Do not migrate providers based only on a generic `Internal Server Error`. First correlate the failed signup's time and `CF-Ray` value with Render logs, confirm HTTP status and Prisma error code, and inspect API/database resource and connection metrics. For a live expo, the existing Render architecture is the lowest-change path if its paid always-on API and persistent database fit the budget.
 
 ## Expo checklist
 

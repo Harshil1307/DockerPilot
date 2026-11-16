@@ -363,6 +363,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       fallbackMessage = retrySeconds > 0
         ? `Too many requests. Try again in ${retrySeconds} seconds.`
         : 'Too many requests. Try again shortly.';
+    } else if (response.status === 500) {
+      fallbackMessage = 'The DockerPilot service could not complete this request. Please try again; if it continues, contact the site administrator with the time it happened.';
+    } else if (response.status === 502 || response.status === 503 || response.status === 504) {
+      fallbackMessage = 'The DockerPilot service is starting or temporarily unavailable. Wait a moment, then try again.';
     }
     throw new ApiError(detail || body?.error || fallbackMessage, response.status);
   }

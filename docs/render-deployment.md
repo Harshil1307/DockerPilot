@@ -5,22 +5,21 @@
 ## Important limits
 
 - This Blueprint uses Render's free plans to avoid silently requiring a paid resource. The free Postgres database is limited and expires after 30 days; it has no backups. Use it only to preview the deployment. Do not store data that must be retained there. Upgrade PostgreSQL before real use. Render's free web service can sleep and has limited availability. See [Render's free plan limits](https://render.com/docs/free).
-- Render's pre-deploy command is unavailable on free web services. Therefore the API start command runs the idempotent `prisma migrate deploy` workflow before starting the API. This runs at each cold start, but applies only migrations not yet recorded as applied. If you later choose a paid API service, you can move the migration command to `preDeployCommand` and remove it from `startCommand`.
-- Render's default `*.onrender.com` domains are on the [Public Suffix List](https://publicsuffix.org/list/public_suffix_list.dat). Since DockerPilot uses a credentialed `SameSite=Lax` session cookie, use two HTTPS sibling subdomains on a domain you control, for example `app.example.com` and `api.example.com`. Do not expect the cookie to work reliably between unrelated sites or the default Render domains. Add both domains to their corresponding Render services and configure their DNS as Render directs.
-- A Render-hosted API has no connection to the Docker daemon on your Mac. Do not set `DOCKER_HOST` or `DOCKER_SOCKET_PATH`, and do not expose a Docker socket. The API and database can host account, project, saved Compose configuration, Compose validation, and activity data. Docker inventory and control features require a local Docker agent; no such agent is implemented yet.
+- The Blueprint currently runs `prisma migrate deploy` in the API build command, then starts the built API. Review this sequence before changing service plans or build configuration; never use `migrate reset` for deployment.
+- The frontend uses same-origin `/api` requests and both checked-in Vercel rewrite files proxy them to Render. This preserves the first-party session cookie; `VITE_API_BASE_URL` is not used in the production frontend build.
+- A Render-hosted API cannot reach a Docker daemon on your laptop. The current Blueprint sets `DOCKER_CONNECTION_MODE=agent`; the paired local agent makes the authenticated outbound connection. Do not set `DOCKER_HOST` or `DOCKER_SOCKET_PATH` on Render and never expose a Docker socket.
 
 ## Create the Blueprint
 
 1. Push the project to the Git provider connected to Render. The repository's default branch is `main`.
 2. In Render, create a Blueprint from the repository and inspect the resource plan before applying it. The initial Blueprint sync creates a new empty Render database; this guide does not import or modify local database data.
 3. When prompted for `FRONTEND_ORIGIN`, enter the exact HTTPS frontend origin, such as `https://app.example.com` (no trailing slash).
-4. When prompted for `VITE_API_BASE_URL`, enter the HTTPS API base URL, such as `https://api.example.com/api`. Vite embeds this value at build time; changing it requires rebuilding the static site.
-5. Confirm that Render has generated `JWT_SECRET`. Do not copy a local `.env` file into the hosted service.
-6. Add the frontend and API custom domains and configure DNS. Keep them as sibling subdomains of the same registrable domain. The API's exact-origin CORS setting and the frontend build URL must match these domains.
-7. Wait for the API health check and static build to pass. Confirm the health endpoint at `https://api.example.com/api/health/ready` returns HTTP 200. Then test account registration/login, project CRUD, Compose environment save/validation, and Activity History.
-8. Treat Docker host status and Docker management pages as unavailable in the hosted app until a separately designed and security-reviewed local agent exists.
+4. Confirm that Render has generated `JWT_SECRET`. Do not copy a local `.env` file into the hosted service.
+5. Configure the exact HTTPS Vercel frontend origin in Render's `FRONTEND_ORIGIN`. Keep the production Vercel `/api` rewrite pointed to the Render API origin.
+6. Wait for the API health check and static build to pass. Confirm `/api/health/ready` through the Vercel site returns HTTP 200. Then test account registration/login, project CRUD, Compose environment save/validation, and Activity History.
+7. To test Docker controls, start Docker Desktop on the user computer, verify `docker version`, and pair/run the local agent. The current preview agent requires Git, Node.js 22, and a repository checkout; standalone installers are not yet published.
 
-Blueprint creation starts the initial deployment even though subsequent automatic deploys are disabled with `autoDeployTrigger: off`. Review the free database lifetime and service plan on the Render confirmation screen before applying it. No Render resources are created by this repository change.
+Blueprint creation starts the initial deployment. The checked-in Blueprint currently uses automatic deploys on commits and free preview resources. Review the free database lifetime and service plan on the Render confirmation screen before applying it. No Render resources are created by this repository change.
 
 ## Services and commands
 
@@ -42,7 +41,7 @@ Blueprint creation starts the initial deployment even though subsequent automati
 - Root directory: unset (repository root).
 - Build: `npm ci --include=dev && npm run build --workspace @dockerpilot/frontend`
 - Publish directory: `frontend/dist`.
-- `VITE_API_BASE_URL`: exact HTTPS API base URL ending in `/api` (prompted, no committed value).
+- Production frontend API base: same-origin `/api`, rewritten by Vercel to the Render API origin.
 - SPA route rewrite sends browser routes to `/index.html`.
 
 ### `dockerpilot-db` PostgreSQL
@@ -56,6 +55,6 @@ Blueprint creation starts the initial deployment even though subsequent automati
 
 The browser API client already sends `credentials: 'include'`. The backend permits only the configured `FRONTEND_ORIGIN`, requires HTTPS for that origin in production, and sets session cookies to Secure, HttpOnly, and SameSite=Lax. The sibling custom domains keep those cross-origin API requests same-site while allowing the existing cookie settings. The `TRUST_PROXY_HOPS=1` value enables Express to use the client address forwarded through Render's proxy for existing IP-based rate limits. The current limiter remains in-memory and the Blueprint intentionally keeps one API instance.
 
-## How to get real Docker connectivity
+## Local Docker connectivity
 
-Do not point the hosted backend at a Mac socket, publish Docker TCP, or tunnel the socket. A separate local agent is required for hosted users to control their own Docker installations. It must use an authenticated outbound connection, revocable pairing, typed and authorized operations, bounded data and logs, timeouts, and local resource ownership checks. The current hosted configuration does not implement or claim that functionality. Local development continues to use the existing backend-to-local-Docker connection.
+Do not point the hosted backend at a Mac socket, publish Docker TCP, or tunnel the socket. Hosted Docker controls use the implemented authenticated outbound agent relay, revocable pairing, typed operations, bounded data, timeouts, and local resource ownership checks. Keep the relay on one API instance. Pairing still uses the source-based preview agent; signed Windows/macOS installers and multiple computers per account remain unfinished.

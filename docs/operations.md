@@ -2,7 +2,7 @@
 
 ## Deployment shape
 
-This release is for one operator on a private or self-hosted machine. Build the frontend as static files and serve them from an HTTPS reverse proxy. Proxy `/api` to the persistent Node API process on a private interface. Run the API on the same trusted host as its Docker daemon and PostgreSQL, or connect it to a private managed PostgreSQL instance. Do not deploy this API as a public multi-tenant Docker control plane.
+DockerPilot supports local/self-hosted Docker mode and a hosted control plane with paired local agents. The hosted agent relay and rate limiter are in-memory and support one connected agent per account, so run one API instance. Per-account projects and agent credentials are scoped, but the product still lacks signed standalone installers, multiple computers per account, shared relay state, and real multi-user/two-daemon deployment verification. Do not market this release as a complete public SaaS yet. Never expose a Docker socket or unauthenticated Docker API.
 
 The hosted setup uses a local DockerPilot agent to connect a user's computer to the hosted API. The agent makes an outbound encrypted connection, so Docker's private socket is never published to the internet. For the expo setup, deploy the backend with `DOCKER_CONNECTION_MODE=agent`, apply the database migration, sign into the hosted site, choose **Pair this computer**, and run the one-time pairing command shown on the page in a Terminal window on the Mac that has Docker Desktop running. Keep that Terminal window open for the demo. Revoke that computer from the site when it should no longer have access. Other users pair their own computers with their own accounts in the same way.
 

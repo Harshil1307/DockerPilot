@@ -49,6 +49,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const environmentLabel = import.meta.env.PROD ? 'HOSTED CONTROL PLANE' : 'LOCAL DEVELOPMENT';
 
   useEffect(() => {
     let active = true;
@@ -76,7 +77,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           <span className="brand-mark" aria-hidden="true">D</span>
           <span>docker<span className="brand-accent">pilot</span></span>
         </Link>
-        <div className="topbar-right"><span className="environment-label">LOCAL ENVIRONMENT</span><StatusBadge connected={connected} /><span className="user-greeting">{user?.name}</span><button className="logout-button" onClick={() => void handleLogout()}>Log out</button></div>
+        <div className="topbar-right"><span className="environment-label">{environmentLabel}</span><StatusBadge connected={connected} /><span className="user-greeting">{user?.name}</span><button className="logout-button" onClick={() => void handleLogout()}>Log out</button></div>
       </header>
       {logoutError && <div className="form-message error-message logout-message" role="alert">{logoutError}</div>}
       <div className="workspace-layout">

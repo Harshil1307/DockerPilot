@@ -4,9 +4,9 @@ import { dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
+import { randomBytes } from 'node:crypto';
 import { WebSocket, type RawData } from 'ws';
 import { z } from 'zod';
-import { executeLocalAgentOperation, isAllowedLocalAgentOperation, safeAgentError } from './operations.js';
 
 const MAX_MESSAGE_BYTES = 2 * 1024 * 1024;
 const configSchema = z.object({
@@ -150,6 +150,7 @@ function handleMessage(socket: WebSocket, config: AgentConfig, raw: RawData, see
         }
       }
       if (message.expiresAt <= Date.now()) throw new Error('This Docker request expired.');
+      const { executeLocalAgentOperation, isAllowedLocalAgentOperation, safeAgentError } = await import('./operations.js');
       if (!isAllowedLocalAgentOperation(message.operation)) throw new Error('This Docker operation is not permitted.');
       const result = await executeLocalAgentOperation(message.operation, message.payload, (progress) => {
         sendJson(socket, { type: 'progress', id: message.id, data: progress });
@@ -162,7 +163,11 @@ function handleMessage(socket: WebSocket, config: AgentConfig, raw: RawData, see
           ? { message: error.message, statusCode: 408, code: 'AGENT_REQUEST_EXPIRED' }
           : error instanceof Error && error.message === 'This Docker operation is not permitted.'
             ? { message: error.message, statusCode: 403, code: 'AGENT_OPERATION_NOT_ALLOWED' }
-            : safeAgentError(error);
+            : await import('./operations.js').then(({ safeAgentError }) => safeAgentError(error)).catch(() => ({
+              message: 'The local Docker agent could not complete the request.',
+              statusCode: 500,
+              code: 'AGENT_OPERATION_FAILED',
+            }));
       sendJson(socket, { type: 'response', id: message.id, ok: false, error: safeError });
     }
   })();
@@ -227,11 +232,16 @@ export async function runAgent(): Promise<void> {
 async function main(): Promise<void> {
   const command = process.argv[2];
   if (command === 'pair') {
+    // The agent reuses Docker service modules that validate the API's env
+    // configuration. Give this isolated process a throwaway signing value so
+    // a hosted user does not need the backend's .env file or JWT secret.
+    process.env.JWT_SECRET ??= randomBytes(32).toString('base64url');
     await pair();
     await runAgent();
     return;
   }
   if (command === 'start') {
+    process.env.JWT_SECRET ??= randomBytes(32).toString('base64url');
     await runAgent();
     return;
   }
