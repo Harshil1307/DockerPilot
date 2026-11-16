@@ -1,6 +1,6 @@
 # DockerPilot
 
-DockerPilot is a local, single-operator Docker management application for registering projects and safely managing containers, Compose deployments, images, volumes, networks, host health, and account activity.
+DockerPilot is a Docker management application for registering projects and safely managing containers, Compose deployments, images, volumes, networks, host health, and account activity. Its hosted control plane can relay Docker operations to a paired local agent over authenticated outbound WSS.
 
 ## Main features
 
@@ -12,7 +12,11 @@ DockerPilot is a local, single-operator Docker management application for regist
 
 ## Architecture overview
 
-The React, TypeScript, and Vite frontend calls an Express API. The API uses Prisma with PostgreSQL for accounts, projects, Compose environments, deployment state, and activity history. Dockerode and a constrained Docker Compose CLI workflow run on the backend; the browser never receives Docker socket access. Authentication uses signed HTTP-only session cookies. The current release is intended for one trusted operator on a local/private installation; database accounts do not provide tenant isolation over a shared Docker daemon.
+The React, TypeScript, and Vite frontend calls an Express API. The API uses Prisma with PostgreSQL for accounts, projects, Compose environments, deployment state, and activity history. In local mode Dockerode and a constrained Docker Compose CLI workflow run on the backend. In hosted agent mode, Docker requests are relayed to the account's paired local agent over outbound WSS; the browser never receives Docker socket access. Authentication uses signed HTTP-only session cookies. See [Expo readiness](docs/expo-readiness.md) for the audited limitations: in particular, distributable installers and multiple connected computers per account are not yet implemented.
+
+## Hosted website users
+
+Hosted access does not require PostgreSQL or a backend `.env` file. Install and start [Docker Desktop](https://www.docker.com/products/docker-desktop/), verify the Engine in a terminal with `docker version`, then sign in and use **Pair this computer** on the dashboard. At this release, the pairing panel still launches the agent from a source checkout using Node.js; a standalone Windows or macOS installer has not yet been published. Therefore the current release does **not** yet meet the no-clone/no-Node hosted onboarding requirement. Do not use the developer setup below as end-user onboarding.
 
 ## Requirements
 
@@ -122,8 +126,8 @@ It requires PostgreSQL with migrations applied, a reachable Docker daemon, and t
 
 ## Production readiness and launch status
 
-- The current application is prepared for private, single-operator self-hosting. It is **not publicly launched** and is not ready to act as a shared multi-user Docker management service.
-- Do not expose the Docker socket or the current API to the public internet. A hosted multi-user service needs a separately designed local agent and command relay; see [production architecture](docs/production-architecture.md).
+- The current application has a hosted control plane and local agent relay, but it is **not ready for public hosted-user onboarding**. Packaged installers, complete first-run wizard, multi-computer-per-account routing, and shared rate-limit storage remain outstanding.
+- Never expose the Docker socket or an unauthenticated Docker API. Keep the hosted API at one instance while its relay and rate limiter remain in memory. Review [production architecture](docs/production-architecture.md) and [Expo readiness](docs/expo-readiness.md).
 - Production configuration now requires HTTPS `FRONTEND_ORIGIN` and a non-placeholder JWT secret, has a database readiness endpoint, supports bounded graceful shutdown, and documents trusted proxy configuration. Keep one API instance because rate limiting remains in-memory.
 - The online dependency audit reports three high-severity affected packages in the same Prisma 6 dependency chain (`deepmerge-ts`, `@prisma/config`, and `prisma`). A safe fix requires a tested Prisma 7 upgrade; this remains a public-release blocker and is documented in [operations](docs/operations.md).
 - Use a persistent, backed-up PostgreSQL database and controlled `npm run db:deploy` migrations. The operator must test backup restoration and provide HTTPS, restricted networking, monitoring, and secrets management.

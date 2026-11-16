@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../auth/require-auth.js';
-import { createRateLimiter, registrationLimiter } from '../middleware/rate-limiters.js';
+import { createRateLimiter } from '../middleware/rate-limiters.js';
 import { login, logout, me, register } from '../controllers/auth.controller.js';
 import { beginGoogleAuth, completeGoogleAuth, getGoogleAuthConfig } from '../controllers/google-auth.controller.js';
 
@@ -11,9 +11,18 @@ const loginLimiter = createRateLimiter(
   { skipSuccessfulRequests: true },
 );
 
+// Count failed attempts, not successful sign-ins. This keeps shared campus,
+// office, and expo networks from consuming the login budget for every user.
+const registrationAbuseLimiter = createRateLimiter(
+  15 * 60 * 1000,
+  5,
+  'Too many account creation attempts. Try again later.',
+  { skipSuccessfulRequests: true },
+);
+
 export const authRouter = Router();
 
-authRouter.post('/register', registrationLimiter, register);
+authRouter.post('/register', registrationAbuseLimiter, register);
 authRouter.post('/login', loginLimiter, login);
 authRouter.get('/google/config', getGoogleAuthConfig);
 authRouter.get('/google', createRateLimiter(15 * 60 * 1000, 20, 'Too many Google Sign-In attempts. Try again later.'), beginGoogleAuth);
