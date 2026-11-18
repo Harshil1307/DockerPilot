@@ -62,9 +62,11 @@ test('Git Detective calls its configured OpenAI-compatible provider and returns 
   const originalHistory = githubRepositoryService.history;
   const originalFetch = globalThis.fetch;
   const originalKey = process.env.OPENAI_API_KEY;
+  const originalGeminiKey = process.env.GEMINI_API_KEY;
   const originalBaseUrl = process.env.OPENAI_BASE_URL;
   const originalModel = process.env.OPENAI_MODEL;
   let providerRequest: { url: string; authorization: string | null; body: { model?: string } } | null = null;
+  delete process.env.GEMINI_API_KEY;
   process.env.OPENAI_API_KEY = 'test-provider-key';
   process.env.OPENAI_BASE_URL = 'https://mock-provider.invalid/v1';
   process.env.OPENAI_MODEL = 'test-model';
@@ -78,12 +80,13 @@ test('Git Detective calls its configured OpenAI-compatible provider and returns 
     assert.equal(providerRequest?.url, 'https://mock-provider.invalid/v1/chat/completions');
     assert.equal(providerRequest?.authorization, 'Bearer test-provider-key');
     assert.equal(providerRequest?.body.model, 'test-model');
-    assert.equal(report.rootCause?.provider, 'test-model');
+    assert.equal(report.rootCause?.provider, 'openai · test-model');
     assert.equal(report.rootCause?.problem, 'api stopped');
   } finally {
     githubRepositoryService.history = originalHistory;
     globalThis.fetch = originalFetch;
     if (originalKey === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = originalKey;
+    if (originalGeminiKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = originalGeminiKey;
     if (originalBaseUrl === undefined) delete process.env.OPENAI_BASE_URL; else process.env.OPENAI_BASE_URL = originalBaseUrl;
     if (originalModel === undefined) delete process.env.OPENAI_MODEL; else process.env.OPENAI_MODEL = originalModel;
   }

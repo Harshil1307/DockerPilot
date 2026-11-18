@@ -72,7 +72,7 @@ test('turns a secret-bearing project Compose file into a safe deployable templat
   try {
     const template = await githubRepositoryService.composeTemplate('https://github.com/acme/app');
     assert.equal(template.fileName, 'docker-compose.yml');
-    assert.match(template.message, /safe, deployable web demo/);
+    assert.match(template.message, /simple Whoami demo/);
     assert.match(template.content, /traefik\/whoami:v1\.11\.0/);
     assert.doesNotMatch(template.content, /POSTGRES_PASSWORD|volumes:|healthcheck:|postgres:/);
     assert.equal(validateComposeYaml(template.content).valid, true);
