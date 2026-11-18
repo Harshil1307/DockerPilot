@@ -1,5 +1,4 @@
-// Production requests stay on the frontend origin so the session cookie is first-party.
-// Vercel rewrites /api to Render; Vite proxies it locally during development.
+// Keep API requests local; Vite proxies /api to the local Express server in development.
 const apiBaseUrl = import.meta.env.PROD
   ? ''
   : (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '').replace(/\/api$/, '');
@@ -40,6 +39,12 @@ export interface Project {
   name: string;
   description: string | null;
   repositoryUrl: string | null;
+  repositoryOwner: string | null;
+  repositoryName: string | null;
+  repositoryDefaultBranch: string | null;
+  repositoryStatus: 'connected' | 'pending' | 'error' | 'disconnected';
+  repositoryError: string | null;
+  repositoryVerifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -51,11 +56,19 @@ export interface ProjectInput {
 }
 
 export interface StackDoctorIssue { key: string; severity: 'CRITICAL' | 'WARNING' | 'INFORMATIONAL'; title: string; description: string; whyItMatters: string; recommendation: string; evidence: string; service: string | null }
+export interface StackDoctorGitCommit { hash: string; shortHash: string; message: string; author: string; committedAt: string; changedFiles: string[]; diff: string; githubUrl: string | null; score: number; confidence: 'low' | 'medium'; relationship: string }
+export interface StackDoctorGitAnalysis { status: 'available' | 'not_connected' | 'unavailable'; source: 'github' | null; repository: string | null; branch: string | null; message: string | null; commits: StackDoctorGitCommit[]; rootCause: { problem: string; affectedService: string | null; explanation: string; confidence: 'low' | 'medium' | 'high'; supportingEvidence: string[]; recommendedFix: string; verificationSteps: string[]; provider: string | null } | null }
 export interface StackDoctorReport { projectId: string; scannedAt: string; healthScore: number; checksPerformed: number; passedChecks: number; warningCount: number; criticalCount: number; issues: StackDoctorIssue[] }
+export interface GitDetectiveResult { analysis: StackDoctorGitAnalysis; basedOnScanAt: string | null }
 export interface StackDoctorScanRecord { id: string; report: StackDoctorReport; createdAt: string }
+export interface BrainContainer { id: string; name: string; image: string; state: string; status: string; createdAt: string; health: string | null; restartCount: number | null; startedAt: string | null; exitCode: number | null; privileged: boolean; readOnlyRootfs: boolean; writableBindMounts: string[]; cpuPercent: number | null; memoryUsageBytes: number | null; memoryLimitBytes: number | null; networkRxBytes: number | null; networkTxBytes: number | null; blockReadBytes: number | null; blockWriteBytes: number | null }
+export interface BrainDashboard { status: string; message: string | null; sampledAt: string; systemHealth: string; containerCount: number | null; warnings: number; criticalIssues: number; topCpu: BrainContainer[]; topMemory: BrainContainer[]; containers: BrainContainer[]; events: { id: string; name: string; image: string | null; action: string; time: string }[]; eventsUnavailable: boolean; anomalies: { severity: 'critical' | 'warning'; title: string; container: string; evidence: string; recommendation: string }[]; idleCandidates: { id: string; name: string; cpuPercent: number | null; memoryUsageBytes: number | null; networkRxBytes: number | null; networkTxBytes: number | null; blockReadBytes: number | null; blockWriteBytes: number | null; networkIoDeltaBytes: number | null; blockIoDeltaBytes: number | null; inactivity: string; reason: string }[]; recommendations: { title: string; reason: string }[]; history: { sampledAt: string; data: unknown }[]; recentDiagnoses: { id: string; createdAt: string; project: { name: string }; report: { healthScore: number; criticalCount: number; warningCount: number } }[] }
+export function getBrainDashboard(): Promise<BrainDashboard> { return request('/brain'); }
+export function askBrain(question: string, context: { role: 'user' | 'assistant'; content: string }[]): Promise<{ answer: string; sampledAt: string; provider: string }> { return request('/brain/chat', { method: 'POST', body: JSON.stringify({ question, context }) }); }
 export function runStackDoctorScan(projectId: string): Promise<StackDoctorReport> { return request(`/projects/${encodeURIComponent(projectId)}/stack-doctor`, { method: 'POST', body: '{}' }); }
 export function getStackDoctorHistory(projectId: string): Promise<StackDoctorScanRecord[]> { return request(`/projects/${encodeURIComponent(projectId)}/stack-doctor`); }
 export function compareStackDoctorScan(projectId: string, scanId: string): Promise<{ current: StackDoctorScanRecord; previous: StackDoctorScanRecord | null; resolved: string[]; outstanding: string[]; newIssues: string[] }> { return request(`/projects/${encodeURIComponent(projectId)}/stack-doctor/${encodeURIComponent(scanId)}/compare`); }
+export function runGitDetectiveAnalysis(projectId: string): Promise<GitDetectiveResult> { return request(`/projects/${encodeURIComponent(projectId)}/git-detective/analyze`, { method: 'POST', body: '{}' }); }
 
 export type ComposeValidationStatus = 'NOT_VALIDATED' | 'VALID' | 'INVALID';
 export type ComposeDeploymentStatus = 'NOT_DEPLOYED' | 'DEPLOYING' | 'RUNNING' | 'FAILED' | 'STOPPED' | 'CLEANING' | 'CLEANUP_FAILED' | 'REMOVED';
@@ -69,6 +82,7 @@ export interface ComposeEnvironmentSummary {
   deploymentStartedAt: string | null;
   deploymentCompletedAt: string | null;
   lastDeploymentError: string | null;
+  publishedPorts?: { serviceName: string; hostPort: number; containerPort: number; url: string | null }[];
   projectId: string;
   createdAt: string;
   updatedAt: string;
@@ -98,6 +112,7 @@ export interface ComposeDeploymentResult {
   startedAt: string | null;
   completedAt: string | null;
   servicesCount?: number;
+  publishedPorts?: { serviceName: string; hostPort: number; containerPort: number; url: string | null }[];
   lastError?: string | null;
 }
 
@@ -556,6 +571,10 @@ export function createComposeEnvironment(projectId: string, input: ComposeEnviro
 
 export function listComposeEnvironments(projectId: string): Promise<ComposeEnvironmentSummary[]> {
   return request<ComposeEnvironmentSummary[]>(`/projects/${encodeURIComponent(projectId)}/compose`);
+}
+
+export function getProjectComposeTemplate(projectId: string): Promise<{ fileName: string | null; content: string | null; message: string }> {
+  return request(`/projects/${encodeURIComponent(projectId)}/compose/template`);
 }
 
 export function getComposeEnvironment(id: string): Promise<ComposeEnvironment> {

@@ -1,6 +1,7 @@
 import { prisma } from '../config/prisma.js';
 import { AppError } from '../errors/app-error.js';
 import { composeDeploymentOwnershipService } from './compose-ownership.service.js';
+import { githubRepositoryService } from './github-repository.service.js';
 
 export interface CreateProjectInput {
   name: string;
@@ -14,9 +15,20 @@ export interface UpdateProjectInput {
   repositoryUrl?: string | null;
 }
 
+async function connectionFields(url: string) {
+  const identity = githubRepositoryService.parseUrl(url);
+  try {
+    const metadata = await githubRepositoryService.metadata(url);
+    return { repositoryOwner: metadata.owner, repositoryName: metadata.name, repositoryDefaultBranch: metadata.defaultBranch, repositoryStatus: 'connected', repositoryError: null, repositoryVerifiedAt: new Date() };
+  } catch (error) {
+    const message = error instanceof AppError ? error.message : 'GitHub repository could not be verified.';
+    return { repositoryOwner: identity.owner, repositoryName: identity.name, repositoryDefaultBranch: null, repositoryStatus: 'error', repositoryError: message.slice(0, 300), repositoryVerifiedAt: new Date() };
+  }
+}
+
 export const projectService = {
   list(userId: string) {
-    return prisma.project.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
+    return prisma.project.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } }).then((projects) => projects);
   },
 
   async get(id: string, userId: string) {
@@ -27,15 +39,32 @@ export const projectService = {
     return project;
   },
 
-  create(userId: string, input: CreateProjectInput) {
-    return prisma.project.create({ data: { ...input, userId } });
+  async create(userId: string, input: CreateProjectInput) {
+    const connection = input.repositoryUrl ? await connectionFields(input.repositoryUrl) : {};
+    return prisma.project.create({ data: { ...input, ...connection, userId } });
   },
 
   async update(id: string, userId: string, input: UpdateProjectInput) {
-    const result = await prisma.project.updateMany({ where: { id, userId }, data: input });
+    const existing = await prisma.project.findFirst({ where: { id, userId } });
+    if (!existing) throw new AppError('Project not found.', 404, 'PROJECT_NOT_FOUND');
+    const updateData: Record<string, unknown> = { ...input };
+    if (Object.hasOwn(input, 'repositoryUrl')) {
+      if (!input.repositoryUrl) {
+        updateData.repositoryOwner = null; updateData.repositoryName = null; updateData.repositoryDefaultBranch = null;
+        updateData.repositoryStatus = 'disconnected'; updateData.repositoryError = null; updateData.repositoryVerifiedAt = null;
+        githubRepositoryService.clearCache(id);
+      } else {
+        const changed = input.repositoryUrl !== existing.repositoryUrl;
+        updateData.repositoryUrl = input.repositoryUrl;
+        if (changed || existing.repositoryStatus !== 'connected') Object.assign(updateData, await connectionFields(input.repositoryUrl));
+        githubRepositoryService.clearCache(id);
+      }
+    }
+    const result = await prisma.project.updateMany({ where: { id, userId }, data: updateData });
     if (result.count === 0) {
       throw new AppError('Project not found.', 404, 'PROJECT_NOT_FOUND');
     }
+    githubRepositoryService.clearCache(id);
     const project = await prisma.project.findFirst({ where: { id, userId } });
     if (!project) {
       throw new AppError('Project not found.', 404, 'PROJECT_NOT_FOUND');

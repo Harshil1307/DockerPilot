@@ -79,14 +79,14 @@ export async function localComposeVersion(): Promise<string> {
 
 export async function deployLocalCompose(payload: unknown, pairedUserId: string): Promise<{ version: string; containers: number; networks: number }> {
   const parsed = composePayloadSchema.safeParse(payload);
-  if (!parsed.success) throw new AppError('The hosted API sent an invalid Compose deployment request.', 400, 'INVALID_AGENT_OPERATION');
+  if (!parsed.success) throw new AppError('The local DockerPilot API sent an invalid Compose deployment request.', 400, 'INVALID_AGENT_OPERATION');
   const { identity, configuration } = parsed.data as { identity: ComposeDeploymentIdentity; configuration: { services: Record<string, { image: string; ports?: string[]; restart?: string; depends_on?: string[] }> } };
   if (identity.ownerId !== pairedUserId || identity.composeProjectName !== generatedComposeProjectName(identity.environmentId)) {
     throw new AppError('Compose deployment identity does not match this paired agent.', 403, 'AGENT_ACCOUNT_MISMATCH');
   }
 
   // Re-run the allowlist validator locally so a compromised or misconfigured
-  // hosted server cannot use this agent to run arbitrary Compose content.
+  // API cannot use this agent to run arbitrary Compose content.
   const normalized = normalizeValidatedComposeYaml(stringifyYaml(configuration, { lineWidth: 0 }));
   if (!normalized.validation.valid || !normalized.configuration) {
     throw new AppError('Compose configuration did not pass local validation.', 400, 'COMPOSE_INVALID');

@@ -6,6 +6,8 @@ import { composeDeploymentService } from '../services/compose-deployment.service
 import { composeCleanupService } from '../services/compose-cleanup.service.js';
 import { composeLifecycleService, type ComposeLifecycleAction } from '../services/compose-lifecycle.service.js';
 import { composeMonitoringService } from '../services/compose-monitoring.service.js';
+import { projectService } from '../services/project.service.js';
+import { githubRepositoryService } from '../services/github-repository.service.js';
 
 const uuidSchema = z.string().uuid();
 const composeEnvironmentSchema = z.object({
@@ -42,6 +44,18 @@ export const listComposeEnvironments: RequestHandler = async (request, response)
     parseId(request.params.projectId, 'Project ID'),
     requireUserId(request.userId),
   ));
+};
+
+export const getProjectComposeTemplate: RequestHandler = async (request, response) => {
+  const project = await projectService.get(parseId(request.params.projectId, 'Project ID'), requireUserId(request.userId));
+  if (!project.repositoryUrl) {
+    response.status(200).json({ fileName: null, content: githubRepositoryService.generalComposeTemplate(), message: 'No repository is connected, so DockerPilot loaded a simple Whoami web demo. It shows basic request and container details. Connect a public GitHub repository to look for this project’s Compose file.' });
+    return;
+  }
+  const template = await githubRepositoryService.composeTemplate(project.repositoryUrl);
+  response.status(200).json(template
+    ? template
+    : { fileName: null, content: githubRepositoryService.generalComposeTemplate(), message: 'No usable Compose file was found at the repository root. DockerPilot loaded a simple Whoami web demo instead; it shows basic request and container details.' });
 };
 
 export const getComposeEnvironment: RequestHandler = async (request, response) => {

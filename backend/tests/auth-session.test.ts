@@ -76,7 +76,7 @@ function cookieFrom(response: Response): string {
 test('login session survives restoration and authorizes project registration; logout clears it', async (context) => {
   mockServices(context);
   const base = await sessionTestServer(context);
-  const origin = 'https://docker-pilot.vercel.app';
+  const origin = 'http://localhost:5173';
   const login = await fetch(`${base}/api/auth/login`, {
     method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: user.email, password: 'correct-password' }),
@@ -129,6 +129,51 @@ test('database connection failures during login return a safe actionable 503', a
   assert.doesNotMatch(JSON.stringify(body), /database connection detail/);
 });
 
+test('database schema failures return migration guidance instead of an internal server error', async (context) => {
+  const oldLogin = authService.login;
+  authService.login = async () => {
+    throw new Prisma.PrismaClientKnownRequestError('missing table detail', {
+      code: 'P2021', clientVersion: Prisma.prismaVersion.client, meta: { modelName: 'User' },
+    });
+  };
+  context.after(() => { authService.login = oldLogin; });
+
+  const base = await sessionTestServer(context);
+  const response = await fetch(`${base}/api/auth/login`, {
+    method: 'POST',
+    headers: { Origin: env.FRONTEND_ORIGIN, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: user.email, password: 'test-password' }),
+  });
+
+  assert.equal(response.status, 503);
+  const body = await response.json() as { error: string; code: string };
+  assert.equal(body.code, 'DATABASE_SCHEMA_OUTDATED');
+  assert.match(body.error, /Apply the project migrations/);
+  assert.doesNotMatch(JSON.stringify(body), /missing table detail|User/);
+});
+
+test('database failures do not consume the failed-login attempt budget', async (context) => {
+  const oldLogin = authService.login;
+  authService.login = async () => {
+    throw new Prisma.PrismaClientInitializationError('unavailable', Prisma.prismaVersion.client, 'P1001');
+  };
+  context.after(() => { authService.login = oldLogin; });
+  const base = await sessionTestServer(context, 1);
+  const input = {
+    method: 'POST',
+    headers: { Origin: env.FRONTEND_ORIGIN, 'Content-Type': 'application/json', 'X-Forwarded-For': '198.51.100.90' },
+    body: JSON.stringify({ email: user.email, password: 'test-password' }),
+  };
+  for (let attempt = 0; attempt < 11; attempt += 1) {
+    const response = await fetch(`${base}/api/auth/login`, input);
+    assert.equal(response.status, 503);
+  }
+
+  authService.login = async () => ({ user, token: createSessionToken(userId) });
+  const recovered = await fetch(`${base}/api/auth/login`, input);
+  assert.equal(recovered.status, 200);
+});
+
 test('registration creates a session and unauthenticated project creation returns 401', async (context) => {
   mockServices(context);
   const base = await sessionTestServer(context);
@@ -145,17 +190,17 @@ test('registration creates a session and unauthenticated project creation return
   assert.ok(cookieFrom(registration));
 });
 
-test('CORS allows the exact Vercel origin, rejects other origins, and answers OPTIONS preflight', async (context) => {
+test('CORS allows the local origin, rejects other origins, and answers OPTIONS preflight', async (context) => {
   const base = await sessionTestServer(context);
   const good = await fetch(`${base}/api/auth/login`, {
     method: 'OPTIONS', headers: {
-      Origin: 'https://docker-pilot.vercel.app',
+      Origin: 'http://localhost:5173',
       'Access-Control-Request-Method': 'POST',
       'Access-Control-Request-Headers': 'content-type',
     },
   });
   assert.equal(good.status, 204);
-  assert.equal(good.headers.get('access-control-allow-origin'), 'https://docker-pilot.vercel.app');
+  assert.equal(good.headers.get('access-control-allow-origin'), 'http://localhost:5173');
   assert.equal(good.headers.get('access-control-allow-credentials'), 'true');
   assert.match(good.headers.get('access-control-allow-methods') ?? '', /POST/);
   assert.match(good.headers.get('access-control-allow-headers') ?? '', /content-type/i);
@@ -173,7 +218,7 @@ test('CORS allows the exact Vercel origin, rejects other origins, and answers OP
 test('successful logins and preflights do not consume the failed-login budget; proxy clients stay distinct', async (context) => {
   mockServices(context);
   const base = await sessionTestServer(context, 2);
-  const origin = 'https://docker-pilot.vercel.app';
+  const origin = 'http://localhost:5173';
   const headers = (clientIp: string) => ({
     Origin: origin,
     'X-Forwarded-For': `${clientIp}, 203.0.113.20`,

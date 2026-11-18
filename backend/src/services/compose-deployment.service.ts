@@ -11,7 +11,7 @@ import { dockerService, type ComposeDeploymentIdentity } from './docker.service.
 import { composeCleanupService } from './compose-cleanup.service.js';
 import { composeDeploymentOwnershipService, generatedComposeProjectName } from './compose-ownership.service.js';
 import { MAX_COMPOSE_YAML_BYTES } from './compose-environment.service.js';
-import { normalizeValidatedComposeYaml } from './compose-validation.service.js';
+import { normalizeValidatedComposeYaml, type ApprovedComposeConfiguration } from './compose-validation.service.js';
 import { generatedComposeConfiguration } from './generated-compose.js';
 import { requestLocalAgent } from './local-agent-relay.js';
 
@@ -98,7 +98,7 @@ function getSafeFailure(error: unknown): SafeFailure {
     return { statusCode: 504, code: 'COMPOSE_DEPLOYMENT_TIMEOUT', message: 'Docker Compose deployment timed out. Check Docker Desktop and the image registry, then retry.' };
   }
   if (/cannot connect to the docker daemon|is the docker daemon running|error during connect/.test(stderr)) {
-    return { statusCode: 503, code: 'DOCKER_UNAVAILABLE', message: 'DockerPilot’s API cannot reach a Docker Engine. On the hosted site, the API runs on Render and cannot access Docker installed on your computer. To manage your local Docker, run DockerPilot on the same computer as Docker, or add a secure local agent.' };
+    return { statusCode: 503, code: 'DOCKER_UNAVAILABLE', message: 'DockerPilot cannot reach a local Docker Engine. Start Docker Desktop or Docker Engine and verify access from this computer.' };
   }
   if (/port is already allocated|address already in use|bind:.*address/.test(stderr)) {
     return { statusCode: 409, code: 'DEPLOYMENT_PORT_CONFLICT', message: 'A configured localhost port is already in use.' };
@@ -125,6 +125,33 @@ function deploymentMetadata(environment: Awaited<ReturnType<typeof findOwnedEnvi
     startedAt: environment.deploymentStartedAt,
     completedAt: environment.deploymentCompletedAt,
     lastError: environment.lastDeploymentError,
+    publishedPorts: [] as PublishedPort[],
+  };
+}
+
+interface PublishedPort { serviceName: string; hostPort: number; containerPort: number; url: string | null }
+
+async function publishedPortsFor(identity: ComposeDeploymentIdentity, containerIds: string[]): Promise<PublishedPort[]> {
+  const inspected = await Promise.all(containerIds.map((id) => dockerService.inspectComposeContainer(id, identity).catch(() => null)));
+  return inspected.flatMap((container) => container ? container.publishedPorts?.flatMap((mapping) => {
+    const match = /^(\d+):(\d+)\/(tcp|udp)$/.exec(mapping);
+    if (!match) return [];
+    const hostPort = Number(match[1]);
+    const containerPort = Number(match[2]);
+    const protocol = match[3];
+    if (protocol !== 'tcp') return [];
+    const webService = /(^|[-_.])(app|api|client|front(?:end)?|proxy|ui|web|www)([-_.]|$)/i.test(container.serviceName ?? '');
+    const isLikelyWebsitePort = webService || [80, 443, 1313, 3000, 3001, 3002, 4000, 4173, 4200, 4321, 5000, 5173, 5174, 8000, 8080, 8081, 8082, 8787, 8888, 9000].includes(containerPort);
+    return [{ serviceName: container.serviceName ?? container.name, hostPort, containerPort, url: isLikelyWebsitePort ? `${containerPort === 443 ? 'https' : 'http'}://localhost:${hostPort}` : null }];
+  }) ?? [] : []);
+}
+
+function allocateHostPortsAutomatically(configuration: ApprovedComposeConfiguration): ApprovedComposeConfiguration {
+  return {
+    services: Object.fromEntries(Object.entries(configuration.services).map(([name, service]) => [name, {
+      ...service,
+      ...(service.ports ? { ports: service.ports.map((port) => port.replace(/^(127\.0\.0\.1):\d+:(\d+)(\/tcp|\/udp)?$/i, '$1::$2$3')) } : {}),
+    }])),
   };
 }
 
@@ -152,7 +179,8 @@ async function updateDeployment(
 export const composeDeploymentService = {
   async getStatus(environmentId: string, userId: string) {
     let environment = await findOwnedEnvironment(environmentId, userId);
-    if (environment.deploymentStatus === 'RUNNING' && environment.deploymentProjectName) {
+    let publishedPorts: PublishedPort[] = [];
+    if (['RUNNING', 'STOPPED'].includes(environment.deploymentStatus) && environment.deploymentProjectName) {
       try {
         const identity: ComposeDeploymentIdentity = {
           ownerId: userId,
@@ -161,6 +189,7 @@ export const composeDeploymentService = {
         composeProjectName: environment.deploymentProjectName,
         };
         const resources = await dockerService.inspectComposeDeployment(identity);
+        if (resources.safeToOperate) publishedPorts = await publishedPortsFor(identity, resources.containerIds);
         if (resources.safeToOperate && resources.containerCount > 0 && resources.runningContainerCount === 0) {
           await updateDeployment(environment.id, userId, {
             deploymentStatus: 'STOPPED',
@@ -173,7 +202,7 @@ export const composeDeploymentService = {
         // Report persisted deployment state if Docker Engine is temporarily unavailable.
       }
     }
-    return deploymentMetadata(environment);
+    return { ...deploymentMetadata(environment), publishedPorts };
   },
 
   async deploy(environmentId: string, userId: string) {
@@ -208,6 +237,7 @@ export const composeDeploymentService = {
         });
         throw new AppError('The saved Compose configuration is no longer valid. Review its validation errors and validate it again.', 400, 'COMPOSE_INVALID');
       }
+      const deploymentConfiguration = allocateHostPortsAutomatically(normalized.configuration);
 
       identity = {
         ownerId: userId,
@@ -241,19 +271,20 @@ export const composeDeploymentService = {
         await runCompose(['version', '--short']);
         workingDirectory = await mkdtemp(join(tmpdir(), 'dockerpilot-compose-'));
         composeFile = join(workingDirectory, 'compose.yaml');
-        const generatedYaml = generatedComposeConfiguration(normalized.configuration, identity);
+        const generatedYaml = generatedComposeConfiguration(deploymentConfiguration, identity);
         await writeFile(composeFile, generatedYaml, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
 
         deploymentAttempted = true;
         await runCompose(composeArgs(identity.composeProjectName, workingDirectory, composeFile, [
           'up', '--detach', '--remove-orphans', '--wait', '--wait-timeout', '90',
-        ]), workingDirectory, { identity, configuration: normalized.configuration });
+        ]), workingDirectory, { identity, configuration: deploymentConfiguration });
 
         const resources = await dockerService.inspectComposeDeployment(identity);
         if (!resources.safeToOperate || resources.containerCount !== normalized.validation.servicesCount
           || resources.runningContainerCount !== resources.containerCount) {
           throw new AppError('Docker Compose did not start every owned service as expected.', 502, 'DEPLOYMENT_VERIFICATION_FAILED');
         }
+        const publishedPorts = await publishedPortsFor(identity, resources.containerIds);
 
         const deploymentCompletedAt = new Date();
         await updateDeployment(environment.id, userId, {
@@ -270,6 +301,7 @@ export const composeDeploymentService = {
           startedAt: deploymentStartedAt,
           completedAt: deploymentCompletedAt,
           servicesCount: resources.containerCount,
+          publishedPorts,
         };
       } catch (error) {
         const failure = getSafeFailure(error);

@@ -5,7 +5,7 @@ const ENVIRONMENT_ID = '44444444-4444-4444-8444-444444444444';
 const CONTAINER_ID = 'a'.repeat(64);
 const NOW = '2026-10-31T10:00:00.000Z';
 const USER = { id: '11111111-1111-4111-8111-111111111111', name: 'Test User', email: 'test@example.invalid', createdAt: NOW, updatedAt: NOW };
-const PROJECT = { id: PROJECT_ID, name: 'Payments API', description: 'Test workspace', repositoryUrl: null, createdAt: NOW, updatedAt: NOW };
+const PROJECT = { id: PROJECT_ID, name: 'Payments API', description: 'Test workspace', repositoryUrl: null, repositoryOwner: null, repositoryName: null, repositoryDefaultBranch: null, repositoryStatus: 'disconnected', repositoryError: null, repositoryVerifiedAt: null, createdAt: NOW, updatedAt: NOW };
 const SAMPLE = 'services:\n  web:\n    image: nginx:alpine\n';
 
 interface MockOptions {
@@ -16,6 +16,7 @@ interface MockOptions {
   emptyLogs?: boolean;
   failFirstCleanup?: boolean;
   lifecycleDelayMs?: number;
+  connectedRepository?: boolean;
 }
 
 function environmentRecord(overrides: Record<string, unknown> = {}) {
@@ -45,6 +46,8 @@ async function installApiMocks(page: Page, options: MockOptions = {}) {
   let lifecycleCalls = 0;
   let monitoringCalls = 0;
   let validationErrors = false;
+  let doctorReport: Record<string, unknown> | null = null;
+  let projectRecord = { ...PROJECT, ...(options.connectedRepository ? { repositoryUrl: 'https://github.com/acme/app', repositoryOwner: 'acme', repositoryName: 'app', repositoryDefaultBranch: 'main', repositoryStatus: 'connected' as const } : {}) };
 
   function summary() {
     if (!composeEnvironment) return null;
@@ -67,10 +70,21 @@ async function installApiMocks(page: Page, options: MockOptions = {}) {
 
     if (path === '/auth/me' && method === 'GET') return json({ user: USER });
     if (path === '/health') return json({ status: 'ok', service: 'dockerpilot-api', timestamp: NOW });
+    if (path === '/projects' && method === 'GET') return json([projectRecord]);
+    if (path === `/projects/${PROJECT_ID}/git-detective/analyze` && method === 'POST') return json({ basedOnScanAt: NOW, analysis: { status: 'available', source: 'github', repository: 'acme/app', branch: 'main', message: null, commits: [{ hash: 'a'.repeat(40), shortHash: 'aaaaaaaa', message: 'Update api dependency', author: 'Developer', committedAt: NOW, changedFiles: ['services/api/package.json'], diff: '+"library": "2.0"', githubUrl: 'https://github.com/acme/app/commit/' + 'a'.repeat(40), score: 65, confidence: 'medium', relationship: 'Potential relationship: changed files match the failing service. This is correlation, not proof of cause.' }], rootCause: { problem: 'api is stopped', affectedService: 'api', explanation: 'The dependency change is a possible lead; evidence does not prove it caused the failure.', confidence: 'medium', supportingEvidence: ['Exit code 1.', 'aaaaaaaa may be related.'], recommendedFix: 'Review startup compatibility.', verificationSteps: ['Rerun the service health check.'], provider: null } } });
     if (path === '/docker/status') return json({ reachable: true, engine: { version: '29.8.0', apiVersion: '1.51', operatingSystem: 'Docker Desktop', architecture: 'arm64' } });
     if (path === '/docker/containers') return json([]);
-    if (path === `/projects/${PROJECT_ID}` && method === 'GET') return json(PROJECT);
-    if (path === `/projects/${PROJECT_ID}/stack-doctor` && method === 'GET') return json([]);
+    if (path === `/projects/${PROJECT_ID}` && method === 'GET') return json(projectRecord);
+    if (path === `/projects/${PROJECT_ID}` && method === 'PATCH') {
+      const input = request.postDataJSON() as { name: string; description: string | null; repositoryUrl: string | null };
+      projectRecord = { ...projectRecord, ...input, repositoryOwner: input.repositoryUrl ? 'acme' : null, repositoryName: input.repositoryUrl ? 'app' : null, repositoryDefaultBranch: input.repositoryUrl ? 'main' : null, repositoryStatus: input.repositoryUrl ? 'connected' : 'disconnected', repositoryError: null, repositoryVerifiedAt: input.repositoryUrl ? NOW : null };
+      return json(projectRecord);
+    }
+    if (path === `/projects/${PROJECT_ID}/stack-doctor` && method === 'GET') return json(doctorReport ? [{ id: 'scan-1', report: doctorReport, createdAt: NOW }] : []);
+    if (path === `/projects/${PROJECT_ID}/stack-doctor` && method === 'POST') {
+      doctorReport = { projectId: PROJECT_ID, scannedAt: NOW, healthScore: 60, checksPerformed: 8, passedChecks: 6, warningCount: 0, criticalCount: 1, issues: [{ key: 'api-stopped', severity: 'CRITICAL', title: 'api is stopped', description: 'Container failed.', whyItMatters: 'Requests fail.', recommendation: 'Review the logs.', evidence: 'Exit code 1.', service: 'api' }] };
+      return json(doctorReport, 201);
+    }
     if (path === `/projects/${PROJECT_ID}/compose` && method === 'GET') return json(summary() ? [summary()] : []);
 
     if (path === `/projects/${PROJECT_ID}/compose` && method === 'POST') {
@@ -105,12 +119,13 @@ async function installApiMocks(page: Page, options: MockOptions = {}) {
         startedAt: deploymentStatus === 'NOT_DEPLOYED' ? null : NOW,
         completedAt: deploymentStatus === 'NOT_DEPLOYED' ? null : NOW,
         lastError: deploymentStatus === 'CLEANUP_FAILED' ? 'Cleanup did not complete. Check Docker Desktop and retry.' : null,
+        publishedPorts: ['RUNNING', 'STOPPED'].includes(deploymentStatus) ? [{ serviceName: 'web', hostPort: 49152, containerPort: 80, url: 'http://localhost:49152' }] : [],
       });
     }
     if (path === `/compose/${ENVIRONMENT_ID}/deploy` && method === 'POST') {
       deploymentStatus = 'RUNNING';
       validationStatus = 'VALID';
-      return json({ environmentId: ENVIRONMENT_ID, status: 'RUNNING', projectName: 'dp-test-project', startedAt: NOW, completedAt: NOW, servicesCount: 1 });
+      return json({ environmentId: ENVIRONMENT_ID, status: 'RUNNING', projectName: 'dp-test-project', startedAt: NOW, completedAt: NOW, servicesCount: 1, publishedPorts: [{ serviceName: 'web', hostPort: 49152, containerPort: 80, url: 'http://localhost:49152' }] });
     }
     const actionMatch = path.match(new RegExp(`^/compose/${ENVIRONMENT_ID}/deployment/(start|stop|restart)$`));
     if (actionMatch && method === 'POST') {
@@ -176,6 +191,7 @@ async function installApiMocks(page: Page, options: MockOptions = {}) {
 async function createEnvironment(page: Page) {
   await page.getByRole('button', { name: /New environment/ }).click();
   await page.getByLabel('Environment name').fill('Local stack');
+  await page.getByLabel('Compose YAML').fill('services:\n  web:\n    image: nginx:alpine\n    ports:\n      - "127.0.0.1:8080:80"\n');
   await page.getByRole('button', { name: 'Save environment' }).click();
   await expect(page.getByText('Compose environment saved.')).toBeVisible();
 }
@@ -208,6 +224,8 @@ test('deploy, show status, and start stop restart with duplicate requests disabl
   await card.getByRole('button', { name: 'Deploy' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Deploy stack' }).click();
   await expect(card.getByText('Running', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Open website: http:\/\/localhost:49152/)).toBeVisible();
+  await expect(card.getByRole('link', { name: /Open web at http:\/\/localhost:49152/ })).toBeVisible();
   await card.getByRole('button', { name: 'Stop' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Stop' }).click();
   const stopping = card.getByRole('button', { name: 'Stopping…' });
@@ -286,6 +304,36 @@ test('empty deployment inventory has a useful empty state', async ({ page }) => 
   await page.getByRole('dialog').getByRole('button', { name: 'Deploy stack' }).click();
   await card.locator('summary', { hasText: 'Services, resource use & logs' }).click();
   await expect(card.getByText('No registered containers are available for this deployment.')).toBeVisible();
+});
+
+test('Stack Doctor keeps its report focused on Docker findings', async ({ page }) => {
+  await installApiMocks(page);
+  await page.goto(`/projects/${PROJECT_ID}`);
+  await page.getByRole('button', { name: 'Run diagnostic scan' }).click();
+  await expect(page.getByRole('heading', { name: 'Critical issues' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Git Detective – Change Analysis' })).toHaveCount(0);
+});
+
+test('Git Detective runs from its own Intelligence page', async ({ page }) => {
+  await installApiMocks(page, { connectedRepository: true });
+  await page.goto('/git-detective');
+  await page.getByRole('button', { name: 'Analyze recent commits' }).click();
+  await expect(page.getByRole('heading', { name: 'acme/app' })).toBeVisible();
+  await expect(page.getByText('Update api dependency')).toBeVisible();
+  await page.getByText('Update api dependency').click();
+  await page.getByText('Inspect relevant code changes').click();
+  await expect(page.getByText('+"library": "2.0"')).toBeVisible();
+});
+
+test('project settings connect a GitHub repository once and can disconnect it', async ({ page }) => {
+  await installApiMocks(page);
+  await page.goto(`/projects/${PROJECT_ID}`);
+  await page.getByRole('button', { name: 'Edit project' }).click();
+  await page.getByLabel(/GitHub repository URL/).fill('https://github.com/acme/app');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByText('Connected · app · main')).toBeVisible();
+  await page.getByRole('button', { name: 'Disconnect GitHub' }).click();
+  await expect(page.getByText('No GitHub repository connected.')).toBeVisible();
 });
 
 test('monitoring shows loading and errors; mobile layout avoids page overflow', async ({ page }) => {

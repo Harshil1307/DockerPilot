@@ -1,23 +1,28 @@
-# Production operations
+# Local operations
 
-## Deployment shape
+## Run shape
 
-DockerPilot supports local/self-hosted Docker mode and a hosted control plane with paired local agents. The hosted agent relay and rate limiter are in-memory and support one connected agent per account, so run one API instance. Per-account projects and agent credentials are scoped, but the product still lacks signed standalone installers, multiple computers per account, shared relay state, and real multi-user/two-daemon deployment verification. Do not market this release as a complete public SaaS yet. Never expose a Docker socket or unauthenticated Docker API.
-
-The hosted setup uses a local DockerPilot agent to connect a user's computer to the hosted API. The agent makes an outbound encrypted connection, so Docker's private socket is never published to the internet. For the expo setup, deploy the backend with `DOCKER_CONNECTION_MODE=agent`, apply the database migration, sign into the hosted site, choose **Pair this computer**, and run the one-time pairing command shown on the page in a Terminal window on the Mac that has Docker Desktop running. Keep that Terminal window open for the demo. Revoke that computer from the site when it should no longer have access. Other users pair their own computers with their own accounts in the same way.
+Run the frontend, API, PostgreSQL, and Docker Engine on the developer's computer. Use one API process because the agent relay and rate limiter are in memory. Never expose the Docker socket or an unauthenticated Docker API. Pairing is optional for direct local mode; when used, choose **Pair This Computer**, run the shown local agent command, and enter the five-minute one-time code. Disconnect revokes the agent credential.
 
 ## Environment variables
 
 | Variable | Required | Meaning |
 | --- | --- | --- |
-| `NODE_ENV` | Yes for deployment | Set to `production` for production cookie and origin checks. |
+| `NODE_ENV` | No | Defaults to `development`. |
 | `PORT` | No | API listen port; defaults to `4000`. |
-| `FRONTEND_ORIGIN` | Yes | Exact browser origin, including scheme and port if applicable. Must use HTTPS in production. |
+| `FRONTEND_ORIGIN` | No | Exact local browser origin; defaults to `http://localhost:5173`. |
 | `DATABASE_URL` | Yes | PostgreSQL URL for Prisma. Keep private; use a least-privilege application role and TLS for remote PostgreSQL. |
 | `JWT_SECRET` | Yes | Unique random signing secret, at least 32 characters. Never use the example value. |
-| `TRUST_PROXY_HOPS` | Only behind a proxy | Number of trusted proxy hops between the API and clients, from `0` to `5`. Keep `0` when directly addressed. Configure to the actual topology; do not blindly trust forwarded headers. |
+| `TRUST_PROXY_HOPS` | No | Keep `0` for the local application. |
 | `DOCKER_SOCKET_PATH` | No | Backend-only local socket override. Never expose this socket over TCP/public interfaces. |
-| `VITE_API_BASE_URL` | Build-time, optional | Defaults to same-origin `/api`. Use a same-origin reverse proxy in production. |
+| `DOCKER_CONNECTION_MODE` | No | `local` uses Dockerode from the API; set `agent` to route Docker requests through the paired computer. |
+| `DOCKERPILOT_AGENT_API_URL` | No | Defaults to `http://localhost:4000/api` for local pairing. |
+| `OPENAI_API_KEY` | Optional | Backend-only key for contextual AI Brain chat. |
+| `OPENAI_MODEL` | Optional | AI model name; defaults to `gpt-4o-mini`. |
+| `OPENAI_BASE_URL` | Optional | OpenAI-compatible API base URL. |
+| `AI_IDLE_CPU_THRESHOLD_PERCENT` | No | Idle candidate CPU threshold; defaults to `1`. |
+| `AI_IDLE_IO_THRESHOLD_BYTES` | No | Maximum network and block I/O counter change per recorded sample; defaults to `1024`. |
+| `AI_IDLE_MINIMUM_MINUTES` | No | Minimum span across low activity samples before suggesting idle; defaults to `15`. |
 | `VITE_API_PROXY_TARGET` | Dev only | Vite development proxy target; defaults to `http://localhost:4000`. It is not included in production frontend output. |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Local Compose only | Development database initialization values in the root `.env`; replace example values outside a disposable local setup. |
 
@@ -55,20 +60,8 @@ Health endpoints:
 - `GET /api/health`: process liveness; does not query dependencies.
 - `GET /api/health/ready`: readiness; returns 503 if PostgreSQL cannot be queried.
 
-The current limiter is in-memory and appropriate only for a single API instance. A horizontally scaled/public deployment requires shared rate-limit storage and a security review. The application currently uses console logging with request method/path and generic safe errors; it does not include a production log aggregation or alerting integration.
+The current limiter is in-memory and appropriate only for a single API process. The application uses console logging with request method/path and generic safe errors.
 
 ## Dependency audit finding (2026-10-31)
 
 The online `npm audit` reports three high-severity affected packages in one dependency chain: `prisma@6.19.3` → `@prisma/config@6.19.3` → `deepmerge-ts@7.1.5` (GHSA-ggr8-5vv4-36mx). The advisory describes stack exhaustion when merging recursive object graphs. npm offers a fix only by moving to Prisma 7, a major upgrade with generator, datasource configuration, and client-instantiation changes. This phase did not force that breaking upgrade or override Prisma's pinned transitive dependency. Treat the finding as a public-release blocker: upgrade `prisma` and `@prisma/client` together on an isolated branch, follow the official Prisma 7 migration guide, and rerun schema, migrations, backend tests, builds, and a restored-database verification before adopting it. [GitHub advisory](https://github.com/advisories/GHSA-ggr8-5vv4-36mx), [Prisma 7 upgrade guide](https://www.prisma.io/docs/guides/upgrade-prisma-orm/v7).
-
-## Hosting cost notes (checked 2026-10-31)
-
-- **Self-hosted on existing hardware:** no new hosting charge; electricity, internet, backups, and maintenance are operator costs. This is the only current recommended configuration.
-- **Vercel frontend:** the official pricing page currently lists Hobby at $0/month and Pro at $20/month; limits, taxes, eligibility, and prices may change. A frontend host alone does not provide Docker daemon access. [Vercel pricing](https://vercel.com/pricing)
-- **Render backend:** the official page lists a free compute option with limitations and a small paid web service at $7/month. A sleeping/ephemeral/free backend is not appropriate for persistent Docker daemon control, and connecting it to each user's local daemon is not supported by the current architecture. [Render pricing](https://render.com/pricing)
-- **Small VPS:** Hetzner's June 2024 announcement listed CX22 at €3.79/month, excluding VAT; this is a dated estimate, not a verified current quote. A VPS running DockerPilot and a Docker daemon manages only that VPS's Docker environment. [Hetzner announcement](https://www.hetzner.com/pressroom/new-cx-plans/)
-- **Managed PostgreSQL, domain, backups, and bandwidth:** prices vary by provider and usage and are not included above. No account, service, domain, or payment method has been used.
-
-## Public release checklist
-
-Before public distribution, the owner must choose and add a license, complete a security review, decide how registrations are controlled, review the support/backup/update commitments, and verify the deployment in its actual target environment. Do not market this version as a shared public Docker management service. The local agent target needs a separate threat model, protocol review, implementation, and test suite.

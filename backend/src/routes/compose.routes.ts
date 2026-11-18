@@ -9,6 +9,7 @@ import {
   deployComposeEnvironment,
   getComposeEnvironment,
   getComposeMonitoring,
+  getProjectComposeTemplate,
   getComposeContainerLogs,
   getComposeDeploymentStatus,
   listComposeEnvironments,
@@ -22,6 +23,7 @@ projectComposeRouter.use(requireAuth);
 projectComposeRouter.use(recordAuthenticatedActivity);
 projectComposeRouter.post('/', dockerMutationLimiter, createComposeEnvironment);
 projectComposeRouter.get('/', listComposeEnvironments);
+projectComposeRouter.get('/template', getProjectComposeTemplate);
 
 export const composeEnvironmentRouter = Router();
 composeEnvironmentRouter.use(requireAuth);

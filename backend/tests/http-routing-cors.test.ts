@@ -12,10 +12,10 @@ test('login and registration paths match the mounted auth API prefix', () => {
   assert.ok(routes.some((route) => route.path === '/api/auth/register' && route.methods.post));
 });
 
-test('CORS allows credentialed preflight from the production frontend only with an explicit origin', () => {
+test('CORS allows credentialed preflight from the local frontend only with an explicit origin', () => {
   let returnedOrigin: string | false | undefined;
-  corsOptions.origin('https://docker-pilot.vercel.app', (_error, origin) => { returnedOrigin = origin; });
-  assert.equal(returnedOrigin, 'https://docker-pilot.vercel.app');
+  corsOptions.origin('http://localhost:5173', (_error, origin) => { returnedOrigin = origin; });
+  assert.equal(returnedOrigin, 'http://localhost:5173');
   assert.equal(corsOptions.credentials, true);
   assert.ok(corsOptions.methods.includes('OPTIONS'));
   assert.ok(corsOptions.methods.includes('POST'));

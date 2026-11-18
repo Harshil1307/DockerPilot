@@ -22,10 +22,12 @@ test('cross-user project reads and deletes stay hidden and filter by the authent
 test('project updates cannot modify a record owned by a different account', async () => {
   const delegate = prisma.project as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
   const originalUpdateMany = delegate.updateMany;
-  let where: unknown;
-  delegate.updateMany = async (args) => { where = (args as { where: unknown }).where; return { count: 0 }; };
+  const originalFindFirst = delegate.findFirst;
+  let updateCalls = 0;
+  delegate.updateMany = async () => { updateCalls += 1; return { count: 0 }; };
+  delegate.findFirst = async () => null;
   try {
     await assert.rejects(projectService.update(projectId, otherUserId, { name: 'updated' }), { code: 'PROJECT_NOT_FOUND' });
-    assert.deepEqual(where, { id: projectId, userId: otherUserId });
-  } finally { delegate.updateMany = originalUpdateMany; }
+    assert.equal(updateCalls, 0);
+  } finally { delegate.updateMany = originalUpdateMany; delegate.findFirst = originalFindFirst; }
 });

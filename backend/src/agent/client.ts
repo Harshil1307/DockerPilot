@@ -29,7 +29,7 @@ type AgentConfig = z.infer<typeof configSchema>;
 const configPath = process.env.DOCKERPILOT_AGENT_CONFIG?.trim() || join(homedir(), '.dockerpilot', 'agent.json');
 
 function apiBaseUrl(): string {
-  const value = process.env.DOCKERPILOT_AGENT_API_URL?.trim() || 'https://dockerpilot-api.onrender.com/api';
+  const value = process.env.DOCKERPILOT_AGENT_API_URL?.trim() || 'http://localhost:4000/api';
   const parsed = new URL(value);
   if (!['https:', 'http:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
     throw new Error('Agent API URL must be an HTTP(S) URL without credentials, query strings, or fragments.');
@@ -185,7 +185,7 @@ async function connectOnce(config: AgentConfig): Promise<'retry' | 'stop'> {
     let opened = false;
     socket.once('open', () => {
       opened = true;
-      console.info(`Connected to DockerPilot as ${config.name}. Keep this terminal open while using the hosted site.`);
+      console.info(`Connected to local DockerPilot as ${config.name}. Keep this terminal open while using the application.`);
     });
     socket.on('message', (raw) => handleMessage(socket, config, raw, seenRequests));
     socket.once('error', (error) => {
@@ -234,7 +234,7 @@ async function main(): Promise<void> {
   if (command === 'pair') {
     // The agent reuses Docker service modules that validate the API's env
     // configuration. Give this isolated process a throwaway signing value so
-    // a hosted user does not need the backend's .env file or JWT secret.
+    // The agent does not need the local API's .env file or JWT secret.
     process.env.JWT_SECRET ??= randomBytes(32).toString('base64url');
     await pair();
     await runAgent();

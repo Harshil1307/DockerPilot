@@ -74,7 +74,7 @@ test('Docker host overview displays Engine details, resource summaries, storage,
   await expect(page.getByRole('heading', { name: 'Docker host overview' })).toBeVisible();
   await expect(page.getByText('29.8.0')).toBeVisible();
   await expect(page.getByText('1.56')).toBeVisible();
-  await expect(page.getByText('Docker Desktop')).toBeVisible();
+  await expect(page.getByText('Docker Desktop', { exact: true })).toBeVisible();
   await expect(page.locator('.host-summary-card').filter({ hasText: 'CONTAINERS' }).locator('> strong')).toHaveText('4');
   await expect(page.locator('.host-summary-card').filter({ hasText: 'VOLUMES' })).toContainText('2 in use');
   await expect(page.getByText('2 GB', { exact: true })).toBeVisible();

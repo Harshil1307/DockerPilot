@@ -6,6 +6,7 @@ import {
   deleteComposeEnvironment,
   getComposeDeploymentStatus,
   getComposeEnvironment,
+  getProjectComposeTemplate,
   listComposeEnvironments,
   listDockerContainers,
   operateComposeDeployment,
@@ -18,8 +19,6 @@ import {
 import { availableComposeActions, deploymentStatusLabel } from '../lib/composeLifecycle';
 import { ComposeMonitoringPanel } from './ComposeMonitoringPanel';
 import { useConfirm } from './ConfirmDialog';
-
-const SAMPLE_COMPOSE = `services:\n  web:\n    image: nginx:alpine\n    ports:\n      - "127.0.0.1:8080:80"\n    restart: unless-stopped\n`;
 
 function validationLabel(status: ComposeEnvironmentSummary['validationStatus']): string {
   if (status === 'VALID') return 'Valid';
@@ -39,6 +38,7 @@ async function loadEnvironmentsWithDeploymentStatus(projectId: string): Promise<
         deploymentStartedAt: deployment.startedAt,
         deploymentCompletedAt: deployment.completedAt,
         lastDeploymentError: deployment.lastError ?? null,
+        publishedPorts: deployment.publishedPorts ?? [],
       };
     } catch {
       return environment;
@@ -46,7 +46,7 @@ async function loadEnvironmentsWithDeploymentStatus(projectId: string): Promise<
   }));
 }
 
-export function ComposeEnvironments({ projectId }: { projectId: string }) {
+export function ComposeEnvironments({ projectId, projectName }: { projectId: string; projectName: string }) {
   const confirm = useConfirm();
   const [environments, setEnvironments] = useState<ComposeEnvironmentSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +60,8 @@ export function ComposeEnvironments({ projectId }: { projectId: string }) {
   const [validation, setValidation] = useState<ComposeValidationResult | null>(null);
   const [busy, setBusy] = useState<'save' | 'validate' | 'load' | null>(null);
   const [deployingId, setDeployingId] = useState<string | null>(null);
-  const [lifecycleOperation, setLifecycleOperation] = useState<{ id: string; action: 'start' | 'stop' | 'restart' | 'cleanup' | 'refresh' } | null>(null);
+  const [lifecycleOperation, setLifecycleOperation] = useState<{ id: string; action: 'start' | 'stop' | 'restart' | 'cleanup' | 'delete' | 'refresh' } | null>(null);
+  const [loadingTemplate, setLoadingTemplate] = useState(false);
 
   const refreshEnvironments = useCallback(async () => {
     setListError(null);
@@ -152,14 +153,23 @@ export function ComposeEnvironments({ projectId }: { projectId: string }) {
     return () => { active = false; };
   }, [projectId]);
 
-  function startNew() {
+  async function startNew() {
     setEnvironmentId(null);
-    setName('');
-    setComposeYaml(SAMPLE_COMPOSE);
+    setName(`${projectName} stack`.slice(0, 100));
+    setComposeYaml('');
     setValidation(null);
     setNotice(null);
     setFormError(null);
     setFormOpen(true);
+    setLoadingTemplate(true);
+    try {
+      const template = await getProjectComposeTemplate(projectId);
+      if (template.content) setComposeYaml(template.content);
+      setNotice(template.message);
+      if (!template.content) setFormError(template.message);
+    } catch (cause) {
+      setFormError(cause instanceof Error ? cause.message : 'Could not load a Compose file from this project’s GitHub repository.');
+    } finally { setLoadingTemplate(false); }
   }
 
   async function startEdit(id: string) {
@@ -234,16 +244,30 @@ export function ComposeEnvironments({ projectId }: { projectId: string }) {
   }
 
   async function handleDelete(environment: ComposeEnvironmentSummary) {
-    if (!await confirm({ title: `Delete Compose environment “${environment.name}”?`, message: 'This cannot be undone.', confirmLabel: 'Delete environment', destructive: true })) return;
+    const needsCleanup = Boolean(environment.deploymentProjectName) && environment.deploymentStatus !== 'REMOVED';
+    const message = needsCleanup
+      ? 'This removes the environment’s registered containers and networks, then deletes its saved configuration. Images and volumes are kept.'
+      : 'This deletes the saved environment configuration. This cannot be undone.';
+    if (!await confirm({ title: `Delete Compose environment “${environment.name}”?`, message, confirmLabel: 'Delete environment', destructive: true })) return;
+    setLifecycleOperation({ id: environment.id, action: 'delete' });
     setListError(null);
     setNotice(null);
     try {
+      if (needsCleanup) {
+        setNotice(`Cleaning up “${environment.name}” before deleting it…`);
+        const cleanup = await cleanupComposeDeployment(environment.id);
+        if (cleanup.status !== 'REMOVED') throw new Error('Cleanup has not been confirmed as complete. The environment was kept.');
+      }
       await deleteComposeEnvironment(environment.id);
       setEnvironments((current) => current.filter((item) => item.id !== environment.id));
       if (environmentId === environment.id) setFormOpen(false);
       setNotice(`Compose environment “${environment.name}” deleted.`);
     } catch (cause) {
-      setListError(cause instanceof Error ? cause.message : 'Could not delete this Compose environment.');
+      const message = cause instanceof Error ? cause.message : 'Could not delete this Compose environment.';
+      try { setEnvironments(await loadEnvironmentsWithDeploymentStatus(projectId)); } catch { /* Keep the visible deletion error if refreshing also fails. */ }
+      setListError(message);
+    } finally {
+      setLifecycleOperation(null);
     }
   }
 
@@ -254,7 +278,7 @@ export function ComposeEnvironments({ projectId }: { projectId: string }) {
     setListError(null);
     setNotice(`Deploying “${environment.name}”…`);
     try {
-      await deployComposeEnvironment(environment.id);
+      const deployment = await deployComposeEnvironment(environment.id);
       let inventoryMessage = '';
       try {
         const containers = await listDockerContainers();
@@ -262,7 +286,11 @@ export function ComposeEnvironments({ projectId }: { projectId: string }) {
       } catch {
         inventoryMessage = ' Deployment succeeded; refresh the Docker dashboard to update its inventory.';
       }
-      setNotice(`“${environment.name}” deployed successfully.${inventoryMessage}`);
+      const websiteUrls = deployment.publishedPorts?.flatMap((port) => port.url ? [port.url] : []) ?? [];
+      const websiteMessage = websiteUrls.length ? ` Open website: ${websiteUrls.join(', ')}.` : '';
+      const publishedMessage = !websiteUrls.length && deployment.publishedPorts?.length ? ` Published TCP ports: ${deployment.publishedPorts.map((port) => `${port.serviceName} ${port.hostPort} → ${port.containerPort}`).join(', ')}.` : '';
+      const noPortMessage = !deployment.publishedPorts?.length ? ' No website port was published; check the Compose file’s ports section.' : '';
+      setNotice(`“${environment.name}” deployed successfully.${websiteMessage}${publishedMessage}${noPortMessage}${inventoryMessage}`);
       await refreshEnvironments();
     } catch (cause) {
       setNotice(null);
@@ -291,7 +319,7 @@ export function ComposeEnvironments({ projectId }: { projectId: string }) {
           <input id="compose-environment-name" className="compose-name-input" value={name} onChange={(event) => { setName(event.target.value); setValidation(null); }} maxLength={100} placeholder="Local development" disabled={busy !== null} />
           <label className="compose-field-label" htmlFor="compose-yaml-editor">Compose YAML <span>64 KB maximum</span></label>
           <textarea id="compose-yaml-editor" className="compose-yaml-editor" value={composeYaml} onChange={(event) => { setComposeYaml(event.target.value); setValidation(null); }} spellCheck={false} autoCapitalize="off" autoCorrect="off" aria-describedby="compose-editor-help" disabled={busy !== null} />
-          <p id="compose-editor-help" className="compose-editor-help">Supported fields: services, image, loopback-only ports, restart, and depends_on. Unsupported fields are reported during validation.</p>
+          <p id="compose-editor-help" className="compose-editor-help">{loadingTemplate ? 'Looking for a Compose file on the project’s default GitHub branch…' : 'DockerPilot uses a compatible Compose file from the connected public GitHub repository when available. If it cannot use that file, the editor loads a small Whoami demo that displays request details. Host ports are assigned automatically on deploy.'}</p>
           {formError && <div className="form-message error-message" role="alert">{formError}</div>}
           {validation && (
             <div className={`compose-validation-result ${validation.valid ? 'validation-valid' : 'validation-invalid'}`} role={validation.valid ? 'status' : 'alert'}>
@@ -320,6 +348,7 @@ export function ComposeEnvironments({ projectId }: { projectId: string }) {
               <div className="compose-environment-main"><h3>{environment.name}</h3><span className={`compose-status status-${environment.validationStatus.toLowerCase().replaceAll('_', '-')}`}>{validationLabel(environment.validationStatus)}</span><span className={`compose-status status-${environment.deploymentStatus.toLowerCase().replaceAll('_', '-')}`}>{deploymentStatusLabel(environment.deploymentStatus)}</span></div>
               <div className="compose-environment-meta"><span>{environment.servicesCount} {environment.servicesCount === 1 ? 'service' : 'services'}</span><span>Updated {new Date(environment.updatedAt).toLocaleString()}</span>{environment.deploymentCompletedAt && <span>Deployment {new Date(environment.deploymentCompletedAt).toLocaleString()}</span>}</div>
               {environment.lastDeploymentError && <div className="form-message error-message compose-notice" role="status">{environment.lastDeploymentError}</div>}
+              {environment.publishedPorts && environment.publishedPorts.length > 0 && <div className="compose-published-ports" aria-label="Published ports"><strong>Published ports</strong>{environment.publishedPorts.map((port) => <span key={`${port.serviceName}-${port.hostPort}-${port.containerPort}`}>{port.url ? <a href={port.url} target="_blank" rel="noreferrer">Open {port.serviceName} at {port.url} ↗</a> : `${port.serviceName}: localhost:${port.hostPort} → container ${port.containerPort}`}</span>)}</div>}
               {environment.deploymentProjectName && <p className="compose-editor-help">Stopping keeps registered resources. Cleanup removes only registered containers and networks; it does not remove images or volumes.</p>}
               <div className="compose-environment-actions compose-lifecycle-actions">
                 {(['NOT_DEPLOYED', 'FAILED', 'REMOVED'].includes(environment.deploymentStatus) && !environment.deploymentProjectName) && <button className="primary-button" type="button" onClick={() => void handleDeploy(environment)} disabled={environment.validationStatus !== 'VALID' || deployingId !== null || busy !== null || lifecycleOperation !== null}>{deployingId === environment.id ? 'Deploying…' : 'Deploy'}</button>}
@@ -330,7 +359,7 @@ export function ComposeEnvironments({ projectId }: { projectId: string }) {
                 {availableComposeActions(environment.deploymentStatus, Boolean(environment.deploymentProjectName)).includes('cleanup') && <button className="danger-button" type="button" onClick={() => void handleCleanup(environment)} disabled={lifecycleOperation !== null || deployingId !== null || busy !== null}>{lifecycleOperation?.id === environment.id && lifecycleOperation.action === 'cleanup' ? 'Cleaning…' : environment.deploymentStatus === 'CLEANUP_FAILED' ? 'Retry cleanup' : 'Cleanup'}</button>}
                 {environment.deploymentStatus === 'CLEANING' && <span className="lifecycle-progress" role="status"><span className="loading-indicator" /> Cleaning…</span>}
                 <button className="secondary-button" type="button" onClick={() => void startEdit(environment.id)} disabled={busy !== null || deployingId !== null || lifecycleOperation !== null || ['DEPLOYING', 'CLEANING'].includes(environment.deploymentStatus)}>{busy === 'load' && environmentId === environment.id ? 'Loading…' : 'Edit'}</button>
-                <button className="danger-button" type="button" onClick={() => void handleDelete(environment)} disabled={busy !== null || deployingId !== null || lifecycleOperation !== null || ['DEPLOYING', 'CLEANING'].includes(environment.deploymentStatus) || environment.deploymentProjectName !== null} title={environment.deploymentProjectName ? 'Deployment resources are still registered.' : undefined}>Delete</button>
+                <button className="danger-button" type="button" onClick={() => void handleDelete(environment)} disabled={busy !== null || deployingId !== null || lifecycleOperation !== null || ['DEPLOYING', 'CLEANING'].includes(environment.deploymentStatus)} title={environment.deploymentProjectName && environment.deploymentStatus !== 'REMOVED' ? 'Delete will first clean up this environment’s registered containers and networks.' : undefined}>{lifecycleOperation?.id === environment.id && lifecycleOperation.action === 'delete' ? 'Deleting…' : 'Delete'}</button>
               </div>
               {environment.deploymentStatus !== 'NOT_DEPLOYED' && <ComposeMonitoringPanel environmentId={environment.id} />}
             </article>

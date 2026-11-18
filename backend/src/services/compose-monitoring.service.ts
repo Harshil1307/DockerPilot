@@ -103,6 +103,7 @@ export interface ComposeContainerInventoryItem {
   image: string | null;
   createdAt: string | null;
   startedAt: string | null;
+  exitCode: number | null;
   restartCount?: number;
   hasResourceLimits?: boolean;
   metrics: ContainerMetrics;
@@ -119,6 +120,7 @@ function missingContainer(id: string): ComposeContainerInventoryItem {
     image: null,
     createdAt: null,
     startedAt: null,
+    exitCode: null,
     metrics: calculateContainerMetrics(null),
     metricsUnavailableReason: 'Container is no longer present in Docker.',
   };
@@ -254,6 +256,7 @@ export function createComposeMonitoringService(
           image: details.image,
           createdAt: details.createdAt,
           startedAt: details.startedAt,
+          exitCode: details.exitCode ?? null,
           restartCount: details.restartCount,
           hasResourceLimits: details.hasResourceLimits,
           metrics,

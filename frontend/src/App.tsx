@@ -11,6 +11,9 @@ import { DockerOverviewPage } from './components/DockerOverviewPage';
 import { ContainerInventory } from './components/ContainerInventory';
 import { LocalAgentPanel } from './components/LocalAgentPanel';
 import { ActivityHistoryPage } from './components/ActivityHistoryPage';
+import { AIBrainPage } from './components/AIBrainPage';
+import { SmartAutoSleepPage } from './components/SmartAutoSleepPage';
+import { GitDetectivePage } from './components/GitDetectivePage';
 import { ProjectForm } from './components/ProjectForm';
 import { LandingPage } from './components/LandingPage';
 import { ProtectedRoute, PublicOnlyRoute } from './components/ProtectedRoute';
@@ -49,7 +52,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const environmentLabel = import.meta.env.PROD ? 'HOSTED CONTROL PLANE' : 'LOCAL DEVELOPMENT';
+  const environmentLabel = 'LOCAL DOCKERPILOT';
 
   useEffect(() => {
     let active = true;
@@ -84,6 +87,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <aside className="workspace-sidebar" aria-label="Main navigation">
           <span className="sidebar-label">WORKSPACE</span>
           <NavLink to="/" end aria-label="Overview" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span><SidebarIcon name="overview" /></span> Overview</NavLink>
+          <span className="sidebar-label sidebar-section-label">INTELLIGENCE</span>
+          <NavLink to="/brain" aria-label="AI Brain" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span aria-hidden="true">✳</span> AI Brain</NavLink>
+          <NavLink to="/smart-sleep" aria-label="Smart Auto-Sleep" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span aria-hidden="true">◷</span> Smart Auto-Sleep</NavLink>
+          <NavLink to="/git-detective" aria-label="Git Detective" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span aria-hidden="true">⌕</span> Git Detective</NavLink>
           <span className="sidebar-label sidebar-section-label">DOCKER</span>
           <NavLink to="/docker" aria-label="Host overview" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span><SidebarIcon name="host" /></span> Host overview</NavLink>
           <NavLink to="/images" aria-label="Images" className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}><span><SidebarIcon name="images" /></span> Images</NavLink>
@@ -257,6 +264,16 @@ function ProjectDetailPage() {
     }
   }
 
+  async function handleDisconnectRepository() {
+    if (!project) return;
+    setSaving(true); setError(null);
+    try {
+      const updated = await updateProject(project.id, { name: project.name, description: project.description, repositoryUrl: null });
+      setProject(updated); setNotice('GitHub repository disconnected.');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not disconnect this repository.'); }
+    finally { setSaving(false); }
+  }
+
   async function handleDelete() {
     if (!project || !await confirm({ title: `Delete “${project.name}”?`, message: 'This action cannot be undone.', confirmLabel: 'Delete project', destructive: true })) return;
     setError(null);
@@ -284,11 +301,11 @@ function ProjectDetailPage() {
             ) : (
               <section className="detail-panel">
                 <div className="detail-field"><span className="card-label">DESCRIPTION</span><p>{project.description || 'No description provided.'}</p></div>
-                <div className="detail-field"><span className="card-label">REPOSITORY URL</span>{project.repositoryUrl ? <a href={project.repositoryUrl} target="_blank" rel="noreferrer">{project.repositoryUrl} <span aria-hidden="true">↗</span></a> : <p>No repository linked.</p>}</div>
+                <div className="detail-field"><span className="card-label">GITHUB REPOSITORY</span>{project.repositoryUrl ? <><a href={project.repositoryUrl} target="_blank" rel="noreferrer">{project.repositoryUrl} <span aria-hidden="true">↗</span></a><p className={`repository-connection repository-${project.repositoryStatus}`}>{project.repositoryStatus === 'connected' ? `Connected · ${project.repositoryName} · ${project.repositoryDefaultBranch ?? 'default branch unavailable'}` : project.repositoryStatus === 'error' ? `Connection issue · ${project.repositoryError ?? 'Retry repository connection in edit project.'}` : 'Connection pending'}</p><button className="secondary-button repository-disconnect" onClick={() => void handleDisconnectRepository()} disabled={saving}>Disconnect GitHub</button></> : <p>No GitHub repository connected.</p>}</div>
                 <div className="detail-timestamps"><span>CREATED {new Date(project.createdAt).toLocaleString()}</span><span>UPDATED {new Date(project.updatedAt).toLocaleString()}</span></div>
               </section>
             )}
-            <ComposeEnvironments projectId={project.id} />
+            <ComposeEnvironments projectId={project.id} projectName={project.name} />
             <StackDoctorPanel projectId={project.id} />
           </>
         )}
@@ -320,6 +337,9 @@ export default function App() {
       <Route path="/networks" element={<AppShell><NetworkManagementPage /></AppShell>} />
       <Route path="/docker" element={<AppShell><DockerOverviewPage /></AppShell>} />
       <Route path="/activity" element={<AppShell><ActivityHistoryPage /></AppShell>} />
+      <Route path="/brain" element={<AppShell><AIBrainPage /></AppShell>} />
+      <Route path="/smart-sleep" element={<AppShell><SmartAutoSleepPage /></AppShell>} />
+      <Route path="/git-detective" element={<AppShell><GitDetectivePage /></AppShell>} />
       <Route path="/projects/new" element={<ProjectCreatePage />} />
       <Route path="/projects/:id" element={<ProjectDetailPage />} />
     </Route>

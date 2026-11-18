@@ -23,6 +23,14 @@ export interface DockerEngineStatus {
   message?: string;
 }
 
+export interface DockerContainerEvent {
+  id: string;
+  name: string;
+  image: string | null;
+  action: string;
+  time: string;
+}
+
 export interface DockerContainerSummary {
   id: string;
   name: string;
@@ -80,9 +88,14 @@ export interface ComposeContainerDetails {
   image: string;
   createdAt: string | null;
   startedAt: string | null;
+  exitCode?: number | null;
   labels: Record<string, string>;
   restartCount?: number;
   hasResourceLimits?: boolean;
+  privileged?: boolean;
+  readOnlyRootfs?: boolean;
+  writableBindMounts?: string[];
+  publishedPorts?: string[];
 }
 
 export interface DockerContainerOwnershipMetadata {
@@ -437,6 +450,49 @@ async function inspectOwnedContainer(container: Docker.Container, userId: string
 }
 
 export const dockerService = {
+  async getRecentContainerEvents(userId: string): Promise<DockerContainerEvent[]> {
+    if (env.DOCKER_CONNECTION_MODE === 'agent') return requestLocalAgent<DockerContainerEvent[]>('engine.events', { userId });
+    try {
+      const until = Math.floor(Date.now() / 1000);
+      const since = until - 15 * 60;
+      const stream = await docker.getEvents({ since, until }) as NodeJS.ReadableStream & { destroy: () => void };
+      return await new Promise<DockerContainerEvent[]>((resolve, reject) => {
+        const events: DockerContainerEvent[] = [];
+        let buffer = '';
+        let settled = false;
+        const finish = (error?: Error) => {
+          if (settled) return;
+          settled = true; clearTimeout(timer);
+          stream.removeListener('data', onData); stream.removeListener('error', onError); stream.removeListener('end', onEnd);
+          error ? reject(error) : resolve(events.slice(-100));
+        };
+        const onData = (chunk: Buffer | string) => {
+          buffer += chunk.toString();
+          if (Buffer.byteLength(buffer) > 512 * 1024) { finish(); stream.destroy(); return; }
+          const lines = buffer.split('\n'); buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const event = JSON.parse(line) as { Type?: unknown; Action?: unknown; time?: unknown; Actor?: { ID?: unknown; Attributes?: Record<string, unknown> } };
+              const attributes = event.Actor?.Attributes ?? {};
+              if (event.Type !== 'container' || attributes['com.dockerpilot.managed'] !== 'true' || attributes['com.dockerpilot.owner-id'] !== userId) continue;
+              if (typeof event.Action !== 'string' || typeof event.Actor?.ID !== 'string') continue;
+              const name = attributes.name;
+              if (typeof name !== 'string' || !name || name.length > 255) continue;
+              const timestamp = typeof event.time === 'number' ? new Date(event.time * 1000).toISOString() : new Date().toISOString();
+              events.push({ id: event.Actor.ID, name, image: typeof attributes.image === 'string' ? attributes.image.slice(0, 255) : null, action: event.Action.slice(0, 64), time: timestamp });
+              if (events.length >= 100) { finish(); stream.destroy(); return; }
+            } catch { /* Ignore malformed daemon events. */ }
+          }
+        };
+        const onError = (error: Error) => finish(error);
+        const onEnd = () => finish();
+        const timer = setTimeout(() => { finish(); stream.destroy(); }, 5_000);
+        stream.on('data', onData); stream.once('error', onError); stream.once('end', onEnd);
+      });
+    } catch (error) { throw translateDockerError(error); }
+  },
+
   async getDiskUsage(): Promise<DockerSystemDiskUsage> {
     if (env.DOCKER_CONNECTION_MODE === 'agent') return requestLocalAgent<DockerSystemDiskUsage>('engine.diskUsage', {});
     try {
@@ -463,7 +519,7 @@ export const dockerService = {
       return {
         reachable: false,
         engine: null,
-        message: 'DockerPilot’s API cannot reach a Docker Engine. On the hosted site, the API runs on Render and cannot access Docker installed on your computer. To manage your local Docker, run DockerPilot on the same computer as Docker, or add a secure local agent.',
+        message: 'DockerPilot cannot reach a local Docker Engine. Start Docker Desktop or Docker Engine and verify access from this computer.',
       };
     }
   },
@@ -498,9 +554,13 @@ export const dockerService = {
         image: info.Config.Image,
         createdAt: info.Created && Number.isFinite(Date.parse(info.Created)) ? new Date(info.Created).toISOString() : null,
         startedAt: info.State.StartedAt && Number.isFinite(Date.parse(info.State.StartedAt)) ? new Date(info.State.StartedAt).toISOString() : null,
+        exitCode: Number.isFinite(info.State.ExitCode) ? info.State.ExitCode : null,
         labels,
         restartCount: info.RestartCount ?? 0,
         hasResourceLimits: Boolean((info.HostConfig?.Memory ?? 0) > 0 || (info.HostConfig?.NanoCpus ?? 0) > 0 || (info.HostConfig?.CpuQuota ?? 0) > 0),
+        privileged: Boolean(info.HostConfig?.Privileged),
+        readOnlyRootfs: Boolean(info.HostConfig?.ReadonlyRootfs),
+        writableBindMounts: (info.Mounts ?? []).filter((mount) => mount.Type === 'bind' && mount.RW).map((mount) => mount.Destination).slice(0, 10),
         restartPolicy: { name: info.HostConfig?.RestartPolicy?.Name ?? 'no', maximumRetryCount: info.HostConfig?.RestartPolicy?.MaximumRetryCount ?? 0 },
         publishedPorts: [...new Set(Object.entries(info.NetworkSettings?.Ports ?? {}).flatMap(([containerPort, bindings]) =>
           (bindings ?? []).map((binding) => `${binding.HostPort}:${containerPort}`)))],
@@ -585,7 +645,7 @@ export const dockerService = {
 
   async inspectComposeResource(type: ComposeDockerResourceType, id: string, identity?: ComposeDeploymentIdentity): Promise<ComposeDockerResource | null> {
     if (env.DOCKER_CONNECTION_MODE === 'agent') {
-      if (!identity) throw new AppError('Deployment identity is required for hosted resource inspection.', 400, 'DEPLOYMENT_OWNERSHIP_CONFLICT');
+      if (!identity) throw new AppError('Deployment identity is required for agent based resource inspection.', 400, 'DEPLOYMENT_OWNERSHIP_CONFLICT');
       return requestLocalAgent<ComposeDockerResource | null>('compose.resource.inspect', { type, id, identity });
     }
     try {
@@ -608,7 +668,7 @@ export const dockerService = {
 
   async inspectComposeContainer(id: string, identity?: ComposeDeploymentIdentity): Promise<ComposeContainerDetails | null> {
     if (env.DOCKER_CONNECTION_MODE === 'agent') {
-      if (!identity) throw new AppError('Deployment identity is required for hosted container inspection.', 400, 'DEPLOYMENT_OWNERSHIP_CONFLICT');
+      if (!identity) throw new AppError('Deployment identity is required for agent based container inspection.', 400, 'DEPLOYMENT_OWNERSHIP_CONFLICT');
       return requestLocalAgent<ComposeContainerDetails | null>('compose.container.inspect', { id, identity });
     }
     try {
@@ -628,6 +688,8 @@ export const dockerService = {
         labels,
         restartCount: info.RestartCount ?? 0,
         hasResourceLimits: Boolean((info.HostConfig?.Memory ?? 0) > 0 || (info.HostConfig?.NanoCpus ?? 0) > 0 || (info.HostConfig?.CpuQuota ?? 0) > 0),
+        publishedPorts: [...new Set(Object.entries(info.NetworkSettings?.Ports ?? {}).flatMap(([containerPort, bindings]) =>
+          (bindings ?? []).map((binding) => `${binding.HostPort}:${containerPort}`)))],
       };
     } catch (error) {
       if (isDockerNotFound(error)) return null;
@@ -637,7 +699,7 @@ export const dockerService = {
 
   async getComposeContainerStats(id: string, identity?: ComposeDeploymentIdentity): Promise<Docker.ContainerStats> {
     if (env.DOCKER_CONNECTION_MODE === 'agent') {
-      if (!identity) throw new AppError('Deployment identity is required for hosted container metrics.', 400, 'DEPLOYMENT_OWNERSHIP_CONFLICT');
+      if (!identity) throw new AppError('Deployment identity is required for agent based container metrics.', 400, 'DEPLOYMENT_OWNERSHIP_CONFLICT');
       return requestLocalAgent<Docker.ContainerStats>('compose.container.stats', { id, identity });
     }
     try {
@@ -677,7 +739,7 @@ export const dockerService = {
 
   async removeComposeResource(type: ComposeDockerResourceType, id: string, identity?: ComposeDeploymentIdentity): Promise<void> {
     if (env.DOCKER_CONNECTION_MODE === 'agent') {
-      if (!identity) throw new AppError('Deployment identity is required for hosted resource removal.', 400, 'DEPLOYMENT_OWNERSHIP_CONFLICT');
+      if (!identity) throw new AppError('Deployment identity is required for agent based resource removal.', 400, 'DEPLOYMENT_OWNERSHIP_CONFLICT');
       await requestLocalAgent('compose.resource.remove', { type, id, identity });
       return;
     }

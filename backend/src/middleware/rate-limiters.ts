@@ -2,6 +2,7 @@ import { ipKeyGenerator, rateLimit } from 'express-rate-limit';
 
 interface RateLimiterOptions {
   skipSuccessfulRequests?: boolean;
+  countServerErrorsAsSuccessful?: boolean;
 }
 
 export function createRateLimiter(
@@ -16,6 +17,12 @@ export function createRateLimiter(
     standardHeaders: true,
     legacyHeaders: false,
     skipSuccessfulRequests: options.skipSuccessfulRequests ?? false,
+    // express-rate-limit's skipFailedRequests also ignores invalid credentials
+    // (4xx), which must count for login abuse protection. Treat only 5xx as
+    // successful for this limiter so infrastructure failures are uncounted.
+    requestWasSuccessful: options.countServerErrorsAsSuccessful
+      ? (_request, response) => response.statusCode < 400 || response.statusCode >= 500
+      : undefined,
     skip: (request) => request.method === 'OPTIONS',
     // Authenticated DockerPilot actions belong to the signed-in account. IP
     // addresses can be shared by multiple people behind the same network or

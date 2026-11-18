@@ -1,51 +1,33 @@
-# Hosted Docker access through a local agent
+# Local Docker connection and AI Brain
 
-## Goal and implementation status
+DockerPilot runs on the developer's computer. The Express API connects to that computer's Docker Engine using Dockerode. The browser uses authenticated REST endpoints and never receives a Docker socket or Docker credential.
 
-Let the hosted DockerPilot API manage the Docker Engine on a user's own computer without exposing a Docker socket or accepting inbound connections to that computer. The same design must support one agent for the current expo demo and separate agents for other users later.
+## Pair This Computer
 
-The authenticated outbound relay, single-use pairing, revocation, reconnect loop, typed operation allowlist, and account ownership checks are implemented. The agent is still distributed as source and requires Node.js. The in-memory relay accepts only one live agent per account; selecting between multiple computers on one account is not implemented.
+The dashboard can create a cryptographically random one-time code. The API stores only its hash, binds it to the signed-in account, expires it after five minutes, and consumes it atomically. The user runs the agent command from this checkout and enters the code at the terminal prompt. The code is not placed in the command or URL. Pairing returns a random revocable agent credential; only its hash is stored by the API, and the agent stores it in a private user file. The computer name and live connection state are shown in the dashboard. Disconnect revokes the credential and closes its active connection.
 
-## Connection shape
+The local agent endpoint defaults to `http://localhost:4000/api`; set `DOCKERPILOT_AGENT_API_URL` in `backend/.env` only when the local API uses a different address. Set `DOCKER_CONNECTION_MODE=agent` to route Docker requests through the paired agent. The default `local` mode connects Dockerode directly from the API process. The command is `npm run agent:dev --workspace @dockerpilot/backend -- pair`.
 
-```mermaid
-flowchart LR
-  Browser[Browser on Vercel] -->|Authenticated REST request| API[DockerPilot API on Render]
-  API -->|Request ID + typed operation| Relay[Agent request broker]
-  Agent[Local DockerPilot agent] -->|Outbound authenticated WSS| Relay
-  Agent -->|Local Docker API / Compose CLI| Engine[Docker Engine on user's computer]
-```
+## AI Brain data flow
 
-The browser continues to call the existing authenticated API. The local agent makes an outbound TLS WebSocket connection to the API, so it works behind NAT and does not require port forwarding, a public Docker socket, or a tunnel to the Docker API.
+`Docker Engine → local DockerPilot API → monitoring and rule-based analysis → authenticated Brain API → dashboard`
 
-## Pairing and device identity
+The dashboard samples DockerPilot account-owned container state, exit code, restart count, health check, CPU, memory, network counters, block I/O, recent Docker events, and configuration risks from Docker Engine. Event reads are bounded to 15 minutes and 100 owned-container events. Samples are stored per account in PostgreSQL for 30 days. Alerts are rule based. Smart Auto-Sleep is a separate review page; idle candidates require consecutive stored samples across the configured inactivity window. Thresholds are `AI_IDLE_CPU_THRESHOLD_PERCENT`, `AI_IDLE_IO_THRESHOLD_BYTES`, and `AI_IDLE_MINIMUM_MINUTES`. Databases and common infrastructure names are excluded. A user must confirm before an owned candidate is stopped; no container is stopped automatically.
 
-1. A signed-in user requests a pairing challenge from the API.
-2. The API creates a cryptographically random, single-use challenge bound to that user, with a short expiry and strict attempt limits. Store only a hash of the challenge.
-3. The local agent is given that challenge by the user and exchanges it over HTTPS for a device identity and random revocable credential. The challenge is consumed atomically.
-4. The agent stores its credential in a private per-user file with restrictive file permissions. The API stores only a hash and the owning account ID.
-5. The agent reconnects over WSS using its credential. Users can list and revoke devices from DockerPilot. Revocation closes any active connection.
+Stack Doctor remains available on each project and inspects saved Compose configuration, owned deployment health, resource limits, and bounded recent logs. Log evidence is redacted best effort before presentation. Pattern based secret removal cannot guarantee arbitrary logs contain no secrets.
 
-Do not put the account's session cookie, JWT signing secret, Docker socket path, or Docker credentials in the agent credential or pairing flow. Pairing codes must not be accepted in URLs or logs.
+## Git Detective
 
-## Request protocol
+Git history is read directly from the public GitHub URL saved in project settings. The paired agent does not inspect local Git folders.
 
-The API keeps authentication, project authorization, Compose validation, rate limits, and activity recording. It sends the connected agent a bounded request containing a unique request ID, expiry, and an operation from a closed allowlist. The agent returns a bounded JSON result or a safe error for that request ID.
+Stack Doctor gathers Git findings as an optional report section after Docker checks. GitHub metadata is verified when connected; scan history uses an in-memory ten-minute per-project cache. The comparison ranks up to eight candidates using time proximity to a nonzero exit, `oom`, or unhealthy event, service/path matches, configuration or dependency files, and terms also present in diagnostics. If there is no matching event, scan time is only a weak recency signal. The score is a heuristic; it does not assert causation. The optional root-cause call uses the backend's configured OpenAI-compatible provider and receives redacted, bounded findings and diffs. `.env` and known credential/key files are never diffed. If GitHub or the optional provider is unavailable, Docker findings are still saved and returned.
 
-The protocol must not carry shell text, arbitrary Docker API paths, or an unvalidated Compose file. Operations should express intent such as listing containers, inspecting a named resource, starting an owned container, pulling an image, collecting bounded logs, or applying a server-validated Compose deployment. The agent independently checks DockerPilot ownership labels before lifecycle changes or cleanup. Compose execution uses a generated configuration and fixed argument templates.
+Git Detective only reads public GitHub metadata, commit history, and bounded diffs from the URL saved in project settings. It never checks out branches or executes repository scripts.
 
-Set strict message-size, response-size, concurrency, and execution-time limits. Reject expired, duplicate, unknown, and malformed requests. Do not log credentials, raw Compose YAML, raw Docker errors, or secret values. A disconnected agent returns a clear unavailable response; it must never fall back to another user's Docker Engine.
+## Contextual chat
 
-## Persistence and account boundaries
+Set `OPENAI_API_KEY` in `backend/.env` to enable the optional OpenAI compatible chat endpoint. `OPENAI_MODEL` defaults to `gpt-4o-mini`; `OPENAI_BASE_URL` defaults to `https://api.openai.com/v1`. The key stays on the backend. The chat receives a bounded container summary and current alerts, not environment values, labels, credentials, or raw logs. Chat is advisory: it cannot execute shell commands or Docker actions. If the provider is missing or unavailable, the API returns a clear error and the dashboard continues to show local rule based analysis.
 
-Each agent is an account-owned device with created/last-seen/revoked timestamps and a hashed credential. Pairing challenges are single-use and expire. Multiple device records may exist for an account, but only one live socket may connect per account and requests have no device selector yet. In local backend mode, do not treat account records as isolation between multiple users sharing one Docker daemon.
+## Boundaries
 
-## Remaining rollout work
-
-- [x] Pairing schema/API, credential revocation, authenticated outbound relay, and agent command allowlist.
-- [x] Route Docker operations through typed agent operations while preserving local mode.
-- [x] Show agent connectivity and pairing instructions in the website.
-- [ ] Build, sign, and publish no-runtime-required Windows and macOS installers.
-- [ ] Add device selection and support multiple live agents per account.
-- [ ] Move relay and rate-limit state to a shared store before scaling the API beyond one instance.
-- [ ] Exercise the deployed Vercel-to-Render-to-local-Docker path on clean Windows and macOS machines, including account isolation and reconnection.
+Authenticated APIs preserve account ownership. Agent requests use a typed allowlist; arbitrary shell text and Docker API paths are not accepted. Lifecycle controls still require DockerPilot ownership labels and user initiated actions. Local mode is intended for one trusted operator; user accounts do not isolate users sharing one Docker daemon.

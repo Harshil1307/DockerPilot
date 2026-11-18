@@ -39,6 +39,15 @@ export const errorHandler: ErrorRequestHandler = (error, request, response, _nex
     return;
   }
 
+  if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2021', 'P2022'].includes(error.code)) {
+    console.error(`[api:error] Database schema is out of date (${error.code}).`);
+    response.status(503).json({
+      error: 'Database schema is out of date. Apply the project migrations and restart the API.',
+      code: 'DATABASE_SCHEMA_OUTDATED',
+    });
+    return;
+  }
+
   if (
     error instanceof Prisma.PrismaClientInitializationError
     || (error instanceof Prisma.PrismaClientKnownRequestError && ['P1000', 'P1001', 'P1002', 'P1003', 'P1008', 'P1010', 'P1011', 'P1017', 'P2024'].includes(error.code))

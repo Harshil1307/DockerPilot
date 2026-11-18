@@ -206,7 +206,7 @@ export function attachLocalAgentRelay(server: Server): void {
       const pending = pendingRequests.get(id);
       if (!pending) continue;
       clearTimeout(pending.timeout);
-      pending.reject(new AppError('The hosted API is shutting down.', 503, 'LOCAL_AGENT_UNAVAILABLE'));
+      pending.reject(new AppError('The local DockerPilot API is shutting down.', 503, 'LOCAL_AGENT_UNAVAILABLE'));
     }
     pendingRequests.clear();
   });

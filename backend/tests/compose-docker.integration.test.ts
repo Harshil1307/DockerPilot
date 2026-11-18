@@ -12,11 +12,12 @@ import { composeMonitoringService } from '../src/services/compose-monitoring.ser
 import { composeDeploymentOwnershipService, generatedComposeProjectName } from '../src/services/compose-ownership.service.js';
 import { dockerService, type ComposeDeploymentIdentity } from '../src/services/docker.service.js';
 import { projectService } from '../src/services/project.service.js';
+import { stackDoctorService } from '../src/services/stack-doctor.service.js';
 
 const execFileAsync = promisify(execFile);
 const ENABLED = process.env.DOCKERPILOT_RUN_DOCKER_INTEGRATION === '1';
 const CLEANUP_MIGRATION = '20261031171500_track_deployment_cleanup_progress';
-const TEST_COMPOSE = 'services:\n  web:\n    image: nginx:alpine\n';
+const TEST_COMPOSE = 'services:\n  web:\n    image: nginx:alpine\n    ports:\n      - "127.0.0.1::80"\n';
 
 test('real Docker Compose deployment lifecycle stays within one uniquely owned project', { skip: !ENABLED, timeout: 12 * 60 * 1000 }, async (context) => {
   const migrationRows = await prisma.$queryRaw<Array<{ migration_name: string }>>`
@@ -61,13 +62,23 @@ test('real Docker Compose deployment lifecycle stays within one uniquely owned p
     };
     const before = await dockerService.inspectComposeDeployment(identity);
     assert.equal(before.resourceCount, 0, 'Refusing to deploy because the generated unique project name already has Docker resources.');
-    context.diagnostic(`Isolated Compose project: ${identity.composeProjectName}; image: nginx:alpine; services: web; ports: none; volumes: none.`);
+    context.diagnostic(`Isolated Compose project: ${identity.composeProjectName}; image: nginx:alpine; services: web; port: Docker-assigned loopback; volumes: none.`);
     assert.equal((await composeEnvironmentService.validate(environment.id, userId)).valid, true);
 
     deploymentAttempted = true;
     const deployed = await composeDeploymentService.deploy(environment.id, userId);
     assert.equal(deployed.status, 'RUNNING');
+    assert.equal(deployed.publishedPorts?.length, 1);
+    assert.equal(deployed.publishedPorts?.[0]?.serviceName, 'web');
+    assert.ok((deployed.publishedPorts?.[0]?.hostPort ?? 0) > 0, 'Docker should assign a free host port');
+    assert.equal(deployed.publishedPorts?.[0]?.url, `http://localhost:${deployed.publishedPorts[0]!.hostPort}`);
     assert.equal((await composeDeploymentService.getStatus(environment.id, userId)).status, 'RUNNING');
+
+    await composeLifecycleService.operate(environment.id, userId, 'stop');
+    const gitReport = await stackDoctorService.scan(project.id, userId);
+    assert.equal(Object.hasOwn(gitReport, 'gitAnalysis'), false, 'Stack Doctor reports only Docker findings; Git Detective has its own Intelligence page.');
+    assert.ok(gitReport.issues.some((issue) => issue.severity === 'CRITICAL' && issue.service === 'web'));
+    await composeLifecycleService.operate(environment.id, userId, 'start');
 
     const stopped = await composeLifecycleService.operate(environment.id, userId, 'stop');
     assert.equal(stopped.status, 'STOPPED');

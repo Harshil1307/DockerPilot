@@ -14,10 +14,13 @@ The documented path is a single-operator local or private self-hosted installati
 6. Generate Prisma and apply local development migrations with `npm run db:generate` and `npm run db:migrate`.
 7. Start the API and frontend with `npm run dev`.
 8. Open `http://localhost:5173/register`, create the local operator account, and sign in.
-9. The dashboard's Docker indicator verifies Engine reachability. Open Containers, Images, Volumes, Networks, or Docker Host to inspect resources. Register a project, add and validate a supported Compose environment, then deploy it. Use the project monitoring and logs panels to inspect only that registered deployment.
-10. To disconnect, log out and stop DockerPilot. Stopping DockerPilot does not stop or delete Docker resources. Use a deployment's guarded cleanup action only when you intend to remove that deployment's registered containers and networks.
+9. Open Overview and use **Pair This Computer**. Generate the one time code, run `npm run agent:dev --workspace @dockerpilot/backend -- pair` from the repository root, and enter the code when prompted. Keep that terminal running; the computer appears as Connected after the agent authenticates.
+10. Open **AI Brain** to collect container metrics, warnings, and recommendations. Configure `OPENAI_API_KEY` in `backend/.env` to enable conversational responses; without it, rule based analysis remains available.
+11. To disconnect, choose **Disconnect** on the paired computer. Logging out or stopping DockerPilot does not stop or delete Docker resources. Use a deployment's guarded cleanup action only when you intend to remove its registered containers and networks.
 
 `npm run dev` starts the Vite frontend on port 5173 and the API on port 4000. The frontend proxies `/api` to the local API during development. `GET /api/health` is a liveness check; `GET /api/health/ready` also verifies database connectivity.
+
+The pairing code expires after five minutes and is single use. The pairing command contains no permanent credential; the agent stores its revocable credential in a private file after the code is redeemed. The local API base defaults to `http://localhost:4000/api` and can be changed with backend-only `DOCKERPILOT_AGENT_API_URL`.
 
 ## Troubleshooting
 

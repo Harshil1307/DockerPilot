@@ -1,22 +1,22 @@
 # DockerPilot
 HI, I AM J GANESH SETTY
-DockerPilot is a Docker management application for registering projects and safely managing containers, Compose deployments, images, volumes, networks, host health, and account activity. Its hosted control plane can relay Docker operations to a paired local agent over authenticated outbound WSS.
+
+DockerPilot is a locally running Docker management application for registering projects and safely managing containers, Compose deployments, images, volumes, networks, host health, account activity, and AI assisted diagnostics.
 
 ## Main features
 
-- Authenticated project and Compose environment management with a restricted YAML subset.
+- Authenticated project and Compose environment management with public-repository import, safe demo fallback, automatic localhost ports, and a restricted YAML subset.
 - Container inventory, search, state filtering, details, one-shot metrics, bounded logs, and ownership-checked lifecycle controls.
 - Image, volume, and network inventories with inspection and guarded operations.
 - Docker host overview with explicit unavailable and partial metric states.
 - Per-account Activity History for supported project and Docker actions.
+- AI Brain dashboard with live container metrics, evidence-based alerts, recommendations, and optional contextual chat.
+- Smart Auto-Sleep review of sustained idle candidates with explicit confirmation and ownership-checked stop controls.
+- Git Detective in Intelligence compares public GitHub commits with the latest Stack Doctor findings.
 
 ## Architecture overview
 
-The React, TypeScript, and Vite frontend calls an Express API. The API uses Prisma with PostgreSQL for accounts, projects, Compose environments, deployment state, and activity history. In local mode Dockerode and a constrained Docker Compose CLI workflow run on the backend. In hosted agent mode, Docker requests are relayed to the account's paired local agent over outbound WSS; the browser never receives Docker socket access. Authentication uses signed HTTP-only session cookies. See [Expo readiness](docs/expo-readiness.md) for the audited limitations: in particular, distributable installers and multiple connected computers per account are not yet implemented.
-
-## Hosted website users
-
-Hosted access does not require PostgreSQL or a backend `.env` file. Install and start [Docker Desktop](https://www.docker.com/products/docker-desktop/), verify the Engine in a terminal with `docker version`, then sign in and use **Pair this computer** on the dashboard. At this release, the pairing panel still launches the agent from a source checkout using Node.js; a standalone Windows or macOS installer has not yet been published. Therefore the current release does **not** yet meet the no-clone/no-Node hosted onboarding requirement. Do not use the developer setup below as end-user onboarding.
+The React, TypeScript, and Vite frontend calls an Express API. The API uses Prisma with PostgreSQL for accounts, projects, Compose environments, deployment state, activity history, and AI Brain metric snapshots. Docker data is collected by the local API or its paired local agent; the browser never receives Docker socket access. Authentication uses signed HTTP-only session cookies.
 
 ## Requirements
 
@@ -61,21 +61,23 @@ npm run db:generate
 npm run db:migrate --workspace backend
 ```
 
-For a production deployment, use `npm run db:deploy` to apply committed migrations without resetting the database. See [production architecture](docs/production-architecture.md), [installation](docs/installation.md), and [operations](docs/operations.md) for the supported deployment shape, environment variables, backups, and launch limitations.
-
-For Render setup, see [Render deployment](docs/render-deployment.md) and the root [`render.yaml`](render.yaml). The Blueprint is configured with free preview plans; its free PostgreSQL database expires after 30 days and must not hold data that needs to persist.
+Use `npm run db:deploy` to apply committed migrations without resetting the database. See [local installation](docs/installation.md), [local agent design](docs/local-agent-design.md), and [operations](docs/operations.md).
 
 Create an account at `/register`, then sign in at `/login`. Sessions use an HTTP-only cookie; project routes require that session and only return or modify the signed-in user's projects. Project registration and management are available through `POST`, `GET`, `PATCH`, and `DELETE /api/projects` (single-project operations use `/api/projects/:id`). The dashboard reads project records from this API; the API uses Prisma to store them in PostgreSQL.
 
-Google Sign-In is optional and leaves email/password authentication available. To enable it, create an OAuth 2.0 Client ID of type **Web application** in Google Cloud Console, configure the OAuth consent screen, and add the exact callback URL `http://localhost:4000/api/auth/google/callback` under **Authorized redirect URIs** for local development. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_OAUTH_REDIRECT_URI` in `backend/.env`; the redirect URI must match the Google Cloud entry exactly. For production, add the HTTPS API callback URL (for example, `https://api.example.com/api/auth/google/callback`) to the same client and set the production values in the API secret manager. Set all three variables or leave all three unset. The backend verifies Google's ID token, audience, nonce, state, PKCE exchange, and verified email before creating a session. Existing accounts with a matching verified email are linked to that Google identity. Never commit the client secret.
+Google Sign-In is optional and leaves email/password authentication available. To enable it, create an OAuth 2.0 Client ID of type **Web application** in Google Cloud Console, configure the OAuth consent screen, and add the exact callback URL `http://localhost:4000/api/auth/google/callback` under **Authorized redirect URIs**. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_OAUTH_REDIRECT_URI` in `backend/.env`; the redirect URI must match exactly. Set all three variables or leave all three unset. The backend verifies Google's ID token, audience, nonce, state, PKCE exchange, and verified email before creating a session. Existing accounts with a matching verified email are linked to that Google identity. Never commit the client secret.
 
-The dashboard's Docker section reads local Engine status and container summaries from `GET /api/docker/status` and `GET /api/docker/containers`. It can start, stop, and restart eligible containers through authenticated `POST /api/docker/containers/:id/start`, `/stop`, and `/restart` routes. Dockerode uses its local default connection when possible and detects Docker Desktop's per-user macOS socket dynamically. If your Docker setup needs a different socket, set `DOCKER_SOCKET_PATH` in `backend/.env`; it is optional and must never be exposed through the frontend.
+The dashboard reads local Engine status and container summaries from `GET /api/docker/status` and `GET /api/docker/containers`. AI Brain uses authenticated `GET /api/brain` to sample account-owned container health and resource metrics, stores per-account snapshots for 30 days, and exposes contextual chat at `POST /api/brain/chat`. Set `OPENAI_API_KEY` in `backend/.env` to enable chat; set optional `OPENAI_MODEL` and `OPENAI_BASE_URL` for a compatible API. Without a provider key, live diagnostics still work and chat clearly reports that it is not configured. The key stays in the backend and is never sent to the browser.
+
+Stack Doctor scans saved Compose configuration, owned container health, resources, and bounded recent logs. Git Detective is a separate page under Intelligence; it reads metadata and recent commits from the public GitHub URL saved in project settings and compares them with the latest Stack Doctor findings. No token or local repository path is required. Candidate ranking is heuristic and does not prove a commit caused a failure. See [GitHub repository integration](docs/github-repository-integration.md).
+
+DockerPilot supports one-time pairing via **Pair This Computer**. The code is single-use and expires after five minutes. The agent stores its revocable credential with private file permissions. For local pairing, `DOCKERPILOT_AGENT_API_URL` defaults to `http://localhost:4000/api`; set `DOCKER_CONNECTION_MODE=agent` to route Docker requests through that paired computer. The default `local` mode connects from the API process directly.
 
 Container controls require the backend to find both `com.dockerpilot.managed=true` and `com.dockerpilot.owner-id=<authenticated user ID>` labels on the container. The owner ID is checked from Docker Engine metadata, never accepted from the browser. Existing unlabelled containers and DockerPilot infrastructure containers remain read-only. Only a trusted backend workflow should apply ownership labels; the current UI does not register existing containers.
 
-Open a project to manage its Compose environments. Authenticated routes create/list environments at `/api/projects/:projectId/compose`, retrieve/update/delete one at `/api/compose/:environmentId`, and validate it with `POST /api/compose/:environmentId/validate`. The validator accepts only `services` with `image`, loopback-only `ports` (`127.0.0.1:HOST:CONTAINER`), supported `restart` policies, and list-form `depends_on`. It rejects other Compose features, including builds, volumes, host namespaces, privileged mode, device access, capability/security overrides, and credential-bearing fields. Keep credentials out of Compose YAML; this milestone does not provide a secret store. Validation alone only checks the saved configuration.
+Open a project to manage its Compose environments. A new environment imports compatible prebuilt image services from the root Compose file in the connected public GitHub repository. Configurations requiring builds, environment values, databases, volumes, or other unsupported fields fall back to a `traefik/whoami` request-inspection demo rather than leaving an unstartable stack. The demo publishes container port 80 on an automatically assigned localhost port. The validator accepts only `services` with `image`, loopback-only `ports` (`127.0.0.1:HOST:CONTAINER` or `127.0.0.1::CONTAINER`), supported `restart` policies, and list-form `depends_on`. It rejects builds, volumes, host namespaces, privileged mode, device access, capability/security overrides, and credential-bearing fields. Keep credentials out of Compose YAML; this milestone does not provide a secret store. Validation alone only checks the saved configuration.
 
-After validation succeeds, use **Deploy** on the environment card and confirm. DockerPilot revalidates the saved YAML, generates a fresh Compose file containing only the supported fields, and invokes the local Docker Compose CLI from a private temporary directory. It never executes the original YAML. Each environment uses a deterministic, isolated Compose project name and receives backend-generated `com.dockerpilot.managed`, `com.dockerpilot.owner-id`, `com.dockerpilot.project-id`, and `com.dockerpilot.environment-id` labels. Services have default CPU and memory limits. Docker Compose must be installed and available to the backend process; deployments are reported as failed with a diagnostic if the CLI or Docker Engine is unavailable. Deployment status and safe error summaries are available from `GET /api/compose/:environmentId/deployment`; deployments use `POST /api/compose/:environmentId/deploy`.
+After validation succeeds, use **Deploy** on the environment card and confirm. DockerPilot revalidates the saved YAML, generates a fresh Compose file containing only the supported fields, and invokes the local Docker Compose CLI from a private temporary directory. It never executes the original YAML. Published services bind to loopback on an automatically assigned free host port; after deploy, DockerPilot shows the URL to open or the exact port mapping. Each environment uses a deterministic, isolated Compose project name and receives backend-generated `com.dockerpilot.managed`, `com.dockerpilot.owner-id`, `com.dockerpilot.project-id`, and `com.dockerpilot.environment-id` labels. Services have default CPU and memory limits. Docker Compose must be installed and available to the backend process; deployments are reported as failed with a diagnostic if the CLI or Docker Engine is unavailable. Deployment status and safe error summaries are available from `GET /api/compose/:environmentId/deployment`; deployments use `POST /api/compose/:environmentId/deploy`.
 
 Deployment lifecycle controls are available through authenticated `POST /api/compose/:environmentId/deployment/start`, `/stop`, and `/restart` routes. They operate on the deployment's registered container IDs and reuse the ownership verifier. Cleanup uses `DELETE /api/compose/:environmentId/deployment`; it removes only verified registered containers and networks, never images or volumes, and supports retry after partial failure.
 
@@ -124,17 +126,16 @@ npm run test:docker --workspace @dockerpilot/backend
 
 It requires PostgreSQL with migrations applied, a reachable Docker daemon, and the `nginx:alpine` image. It creates a uniquely named Compose project and is not part of the default test suite.
 
-## Production readiness and launch status
+## Local operation notes
 
-- The current application has a hosted control plane, local agent relay, and ordered first-run connection guide, but it is **not ready for no-clone public onboarding**. Packaged installers, multi-computer-per-account routing, and shared rate-limit storage remain outstanding.
-- Never expose the Docker socket or an unauthenticated Docker API. Keep the hosted API at one instance while its relay and rate limiter remain in memory. Review [production architecture](docs/production-architecture.md) and [Expo readiness](docs/expo-readiness.md).
-- Production configuration now requires HTTPS `FRONTEND_ORIGIN` and a non-placeholder JWT secret, has a database readiness endpoint, supports bounded graceful shutdown, and documents trusted proxy configuration. Keep one API instance because rate limiting remains in-memory.
+- The agent relay and rate limiter are in memory; keep one local API process.
+- Never expose the Docker socket or an unauthenticated Docker API. Keep one API process while its relay and rate limiter remain in memory. Review [local architecture](docs/production-architecture.md) and [local readiness](docs/expo-readiness.md).
+- The API has a database readiness endpoint and bounded graceful shutdown. Configure a strong local `JWT_SECRET` and keep `.env` files private.
 - The online dependency audit reports three high-severity affected packages in the same Prisma 6 dependency chain (`deepmerge-ts`, `@prisma/config`, and `prisma`). A safe fix requires a tested Prisma 7 upgrade; this remains a public-release blocker and is documented in [operations](docs/operations.md).
-- Use a persistent, backed-up PostgreSQL database and controlled `npm run db:deploy` migrations. The operator must test backup restoration and provide HTTPS, restricted networking, monitoring, and secrets management.
+- Use controlled `npm run db:deploy` migrations and keep local database backups if you need to preserve data.
 - The repository has no `LICENSE` file. The owner must choose a license before public open-source distribution.
-- Deployment providers have not been configured, and no public deployment, paid service, domain, or external credentials have been used.
 
-Environment variables are configured by name in the example files; provide deployment-specific values through a secret manager or protected environment configuration. Never commit actual credentials.
+Environment variables are configured by name in the example files. Keep actual credentials in private local `.env` files and never commit them.
 
 ## Project layout
 

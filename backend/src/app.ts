@@ -14,6 +14,8 @@ import { activityRouter } from './routes/activity.routes.js';
 import { localAgentRouter } from './routes/local-agent.routes.js';
 import { corsOptions } from './config/cors.js';
 import { stackDoctorRouter } from './routes/stack-doctor.routes.js';
+import { gitDetectiveRouter } from './routes/git-detective.routes.js';
+import { aiBrainRouter } from './routes/ai-brain.routes.js';
 
 export const AUTH_API_PREFIX = '/api/auth';
 
@@ -33,10 +35,12 @@ app.use('/api/health', healthRouter);
 app.use(AUTH_API_PREFIX, authRouter);
 app.use('/api/activity', activityRouter);
 app.use('/api/agents', localAgentRouter);
+app.use('/api/brain', aiBrainRouter);
 app.use('/api/docker', dockerRouter);
 app.use('/api/projects', projectRouter);
 app.use('/api/projects/:projectId/compose', projectComposeRouter);
 app.use('/api/projects/:projectId/stack-doctor', stackDoctorRouter);
+app.use('/api/projects/:projectId/git-detective', gitDetectiveRouter);
 app.use('/api/compose', composeEnvironmentRouter);
 app.use((_request, response) => {
   response.status(404).json({ error: 'Not found' });

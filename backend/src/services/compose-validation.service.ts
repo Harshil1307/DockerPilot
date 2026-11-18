@@ -72,11 +72,11 @@ export function findComposeSecretFields(composeYaml: string): string[] {
 
 function validPort(value: unknown): value is string {
   if (typeof value !== 'string') return false;
-  const match = /^127\.0\.0\.1:(\d+):(\d+)(?:\/(tcp|udp))?$/.exec(value);
+  const match = /^127\.0\.0\.1:(\d*):(\d+)(?:\/(tcp|udp))?$/.exec(value);
   if (!match) return false;
-  const hostPort = Number(match[1]);
+  const hostPort = match[1] === '' ? null : Number(match[1]);
   const containerPort = Number(match[2]);
-  return hostPort >= 1 && hostPort <= 65535 && containerPort >= 1 && containerPort <= 65535;
+  return (hostPort === null || (hostPort >= 1 && hostPort <= 65535)) && containerPort >= 1 && containerPort <= 65535;
 }
 
 function validRestartPolicy(value: unknown): value is string {
@@ -162,11 +162,11 @@ export function validateComposeYaml(composeYaml: string): ComposeValidationResul
 
     if (service.ports !== undefined) {
       if (!Array.isArray(service.ports)) {
-        errors.push(`${prefix}.ports: ports must be a list of '127.0.0.1:HOST:CONTAINER' strings.`);
+        errors.push(`${prefix}.ports: ports must be a list of '127.0.0.1:HOST:CONTAINER' or '127.0.0.1::CONTAINER' strings.`);
       } else {
         service.ports.forEach((port, index) => {
           if (!validPort(port)) {
-            errors.push(`${prefix}.ports[${index}]: use '127.0.0.1:HOST:CONTAINER' with numeric ports from 1 to 65535 and optional /tcp or /udp.`);
+            errors.push(`${prefix}.ports[${index}]: use '127.0.0.1:HOST:CONTAINER' or '127.0.0.1::CONTAINER' with ports from 1 to 65535 and optional /tcp or /udp.`);
           }
         });
       }

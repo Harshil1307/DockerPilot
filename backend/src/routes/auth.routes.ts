@@ -8,7 +8,9 @@ const loginLimiter = createRateLimiter(
   15 * 60 * 1000,
   10,
   'Too many login attempts. Try again later.',
-  { skipSuccessfulRequests: true },
+  // Failed credentials count, while server-side failures (for example, an
+  // unavailable or unmigrated database) must not lock users out.
+  { skipSuccessfulRequests: true, countServerErrorsAsSuccessful: true },
 );
 
 // Count failed attempts, not successful sign-ins. This keeps shared campus,

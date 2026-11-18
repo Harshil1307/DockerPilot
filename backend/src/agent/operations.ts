@@ -27,7 +27,7 @@ const networkCreateSchema = z.object({ name: z.string().min(1).max(255), interna
 const networkRemoveSchema = z.object({ id: dockerId, confirmationName: z.string().min(1).max(255) }).strict();
 
 const operationNames = new Set([
-  'engine.status', 'engine.diskUsage', 'compose.version', 'compose.up',
+  'engine.status', 'engine.diskUsage', 'engine.events', 'compose.version', 'compose.up',
   'container.list', 'container.inspect', 'container.stats', 'container.logs', 'container.control',
   'compose.resources.list', 'compose.deployment.inspect', 'compose.resource.inspect', 'compose.resource.remove',
   'compose.container.inspect', 'compose.container.stats', 'compose.container.logs',
@@ -63,7 +63,7 @@ function assertAgentAccount(userId: string, identity?: ComposeDeploymentIdentity
 
 function decode<T>(schema: z.ZodType<T>, payload: unknown): T {
   const parsed = schema.safeParse(payload);
-  if (!parsed.success) throw new AppError('The hosted API sent an invalid Docker operation.', 400, 'INVALID_AGENT_OPERATION');
+  if (!parsed.success) throw new AppError('The local DockerPilot API sent an invalid Docker operation.', 400, 'INVALID_AGENT_OPERATION');
   return parsed.data;
 }
 
@@ -85,6 +85,11 @@ export async function executeLocalAgentOperation(operation: string, payload: unk
       return dockerService.getStatus();
     case 'engine.diskUsage':
       return dockerService.getDiskUsage();
+    case 'engine.events': {
+      const { userId } = decode(containerListSchema, payload);
+      if (userId !== pairedUserId) throw new AppError('Agent request account mismatch.', 403, 'AGENT_ACCOUNT_MISMATCH');
+      return dockerService.getRecentContainerEvents(userId);
+    }
     case 'container.list': {
       const { userId } = decode(containerListSchema, payload);
       return dockerService.listContainers(userId);

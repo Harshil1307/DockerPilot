@@ -26,7 +26,7 @@ function setSessionCookie(response: Response, token: string): void {
   response.cookie(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
-    // Vercel proxies /api to Render, so the browser uses a same-origin cookie.
+    // Local frontend and API share the configured first-party origin during development.
     sameSite: 'lax',
     path: '/',
     maxAge: SESSION_DURATION_MS,

@@ -44,8 +44,15 @@ export function ProjectForm({
       return;
     }
     if (trimmedUrl && !/^https?:\/\//i.test(trimmedUrl)) {
-      setValidationError('Enter a repository URL beginning with https:// or http://.');
+      setValidationError('Enter a GitHub repository URL beginning with https://github.com/.');
       return;
+    }
+    if (trimmedUrl) {
+      try {
+        const url = new URL(trimmedUrl);
+        const path = url.pathname.replace(/\/$/, '').replace(/\.git$/i, '').split('/').filter(Boolean);
+        if (url.protocol !== 'https:' || url.hostname.toLowerCase() !== 'github.com' || path.length !== 2 || url.username || url.password || url.search || url.hash) throw new Error('invalid');
+      } catch { setValidationError('Enter a GitHub repository URL in the form https://github.com/owner/repository.'); return; }
     }
     try {
       new URL(trimmedUrl);
@@ -72,14 +79,14 @@ export function ProjectForm({
         <small>A clear name to identify this project in DockerPilot.</small>
       </label>
       <label className="form-field">
+        <span>GitHub repository URL <span className="optional-label">OPTIONAL</span></span>
+        <input type="url" value={repositoryUrl} onChange={(event) => setRepositoryUrl(event.target.value)} placeholder="https://github.com/owner/repository" />
+        <small>Connect a public GitHub repository. Stack Doctor reads its default branch and recent commits automatically.</small>
+      </label>
+      <label className="form-field">
         <span>Description <span className="optional-label">OPTIONAL</span></span>
         <textarea rows={4} maxLength={1000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="What does this project do?" />
         <small>{description.length}/1000 characters</small>
-      </label>
-      <label className="form-field">
-        <span>Repository URL <span className="optional-label">OPTIONAL</span></span>
-        <input type="url" value={repositoryUrl} onChange={(event) => setRepositoryUrl(event.target.value)} placeholder="https://github.com/your-org/your-project" />
-        <small>Save a repository reference for future integrations.</small>
       </label>
       {(validationError || error) && <div className="form-message error-message" role="alert">{validationError || error}</div>}
       <div className="form-actions">
