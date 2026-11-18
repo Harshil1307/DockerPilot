@@ -319,9 +319,10 @@ test('Git Detective runs from its own Intelligence page', async ({ page }) => {
   await page.goto('/git-detective');
   await page.getByRole('button', { name: 'Analyze recent commits' }).click();
   await expect(page.getByRole('heading', { name: 'acme/app' })).toBeVisible();
-  await expect(page.getByText('Update api dependency')).toBeVisible();
-  await page.getByText('Update api dependency').click();
-  await page.getByText('Inspect relevant code changes').click();
+  const commit = page.locator('.git-commit-card').filter({ hasText: 'Update api dependency' });
+  await expect(commit).toBeVisible();
+  await commit.locator(':scope > summary').click();
+  await commit.getByText('View code changes').click();
   await expect(page.getByText('+"library": "2.0"')).toBeVisible();
 });
 
