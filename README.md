@@ -1,5 +1,4 @@
 # DockerPilot
-HI, I AM J GANESH SETTY
 
 DockerPilot is a locally running Docker management application for registering projects and safely managing containers, Compose deployments, images, volumes, networks, host health, account activity, and AI assisted diagnostics.
 
@@ -22,46 +21,122 @@ The React, TypeScript, and Vite frontend calls an Express API. The API uses Pris
 
 - Node.js 22.12+ (Google Sign-In uses a Node 22 compatible Google auth client)
 - npm 10+
-- Docker with Docker Compose
+- Docker Desktop with Docker Compose v2
 
-## Setup
+## Install and start locally
+
+DockerPilot needs PostgreSQL for accounts and project data. The repository's Docker Compose file runs PostgreSQL 17 in Docker Desktop and keeps its data in a named volume.
+
+### macOS
+
+1. Install [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/). Choose the download for your Mac's Apple silicon or Intel processor.
+2. Open Docker Desktop from Applications and wait until it says Docker is running.
+3. Install Node.js 22.12 or newer and npm 10 or newer if they are not already installed.
+4. Open Terminal and change to the DockerPilot repository folder.
+5. Create the local configuration files if they do not already exist, then install the project dependencies:
 
 ```bash
+[ -f .env ] || cp .env.example .env
+[ -f backend/.env ] || cp backend/.env.example backend/.env
 npm install
-cp .env.example .env
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
 ```
 
-The root `.env` supplies local PostgreSQL settings to Compose. The example credentials are for local development only. If you change them, update `DATABASE_URL` in `backend/.env` to match.
-Generate a random JWT signing secret with `openssl rand -base64 48` and replace the `JWT_SECRET` placeholder in `backend/.env` before starting the API. Keep `.env` files out of version control.
+The root `.env` provides local PostgreSQL settings to Docker Compose. `backend/.env` contains the database connection and API settings. The example values are for local development only. If you change the PostgreSQL values in `.env`, update `DATABASE_URL` in `backend/.env` to match. Replace the `JWT_SECRET` placeholder with a random secret; for example, run `openssl rand -base64 48` in Terminal and paste the result into `backend/.env`. Keep both `.env` files private.
 
-## Run locally
-
-Start PostgreSQL in one terminal:
+6. Start PostgreSQL:
 
 ```bash
 docker compose up -d postgres
 ```
 
-In another terminal, start both apps:
+7. Generate the Prisma client and apply the local database migrations:
+
+```bash
+npm run db:generate
+npm run db:migrate
+```
+
+8. Start the backend and frontend in separate Terminal windows or tabs. Run one command in each:
+
+Backend:
+
+```bash
+npm run dev --workspace @dockerpilot/backend
+```
+
+Frontend:
+
+```bash
+npm run dev --workspace @dockerpilot/frontend
+```
+
+Open the frontend at http://localhost:5173. The API runs at http://localhost:4000. Its liveness check is http://localhost:4000/api/health; `/api/health/ready` also checks the PostgreSQL connection.
+
+### Windows (PowerShell)
+
+1. Install [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/). Follow the installer prompts and enable its recommended WSL 2 backend if asked.
+2. Launch Docker Desktop from the Start menu and wait until it says Docker is running.
+3. Install Node.js 22.12 or newer and npm 10 or newer if they are not already installed.
+4. Open PowerShell and change to the DockerPilot repository folder.
+5. Create the local configuration files if they do not already exist, then install the project dependencies:
+
+```powershell
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+if (!(Test-Path backend/.env)) { Copy-Item backend/.env.example backend/.env }
+npm install
+```
+
+The root `.env` provides local PostgreSQL settings to Docker Compose. `backend/.env` contains the database connection and API settings. The example values are for local development only. If you change the PostgreSQL values in `.env`, update `DATABASE_URL` in `backend/.env` to match. Replace the `JWT_SECRET` placeholder with a random secret before starting the API. To generate one in PowerShell, run:
+
+```powershell
+$bytes = New-Object byte[] 48
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+$rng.GetBytes($bytes)
+[Convert]::ToBase64String($bytes)
+```
+
+Paste the result into `backend/.env`. Keep both `.env` files private.
+
+6. Start PostgreSQL:
+
+```powershell
+docker compose up -d postgres
+```
+
+7. Generate the Prisma client and apply the local database migrations:
+
+```powershell
+npm run db:generate
+npm run db:migrate
+```
+
+8. Start the backend and frontend in separate PowerShell windows or tabs. Run one command in each:
+
+Backend:
+
+```powershell
+npm run dev --workspace @dockerpilot/backend
+```
+
+Frontend:
+
+```powershell
+npm run dev --workspace @dockerpilot/frontend
+```
+
+Open the frontend at http://localhost:5173. The API runs at http://localhost:4000. Its liveness check is http://localhost:4000/api/health; `/api/health/ready` also checks the PostgreSQL connection.
+
+### Start both apps with one command
+
+After Docker Desktop and PostgreSQL are running and the database migrations are applied, you can start both the backend and frontend together from the repository root:
 
 ```bash
 npm run dev
 ```
 
-- Frontend: http://localhost:5173
-- API: http://localhost:4000
-- Health check: http://localhost:4000/api/health
+The command works in macOS Terminal and Windows PowerShell. To stop either the individual development servers or the combined command, press `Ctrl+C` in the terminal where it is running.
 
-The liveness endpoint does not require PostgreSQL; `/api/health/ready` checks database connectivity. Apply the checked-in database migrations with:
-
-```bash
-npm run db:generate
-npm run db:migrate --workspace backend
-```
-
-Use `npm run db:deploy` to apply committed migrations without resetting the database. See [local installation](docs/installation.md), [local agent design](docs/local-agent-design.md), and [operations](docs/operations.md).
+To stop PostgreSQL without deleting its stored data, run `docker compose stop postgres` from the repository root. See [local installation](docs/installation.md), [local agent design](docs/local-agent-design.md), and [operations](docs/operations.md).
 
 Create an account at `/register`, then sign in at `/login`. Sessions use an HTTP-only cookie; project routes require that session and only return or modify the signed-in user's projects. Project registration and management are available through `POST`, `GET`, `PATCH`, and `DELETE /api/projects` (single-project operations use `/api/projects/:id`). The dashboard reads project records from this API; the API uses Prisma to store them in PostgreSQL.
 
